@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: generals-conquest-server
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node index.cjs
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WS_PORT
+        value: 10000
+    healthCheckPath: /

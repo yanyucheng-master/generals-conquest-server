@@ -1,0 +1,16 @@
+{
+  "name": "generals-conquest-ws",
+  "private": true,
+  "version": "1.0.0",
+  "description": "《将领：征服》联机 WebSocket 服务器",
+  "main": "index.cjs",
+  "scripts": {
+    "start": "node index.cjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.20.1"
+  }
+}

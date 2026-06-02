@@ -1,0 +1,10 @@
+# Render Blueprint — 仓库根目录若在 app/，请在 Render 控制台手动设 Root Directory 为 server
+services:
+  - type: web
+    name: generals-conquest-ws
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /

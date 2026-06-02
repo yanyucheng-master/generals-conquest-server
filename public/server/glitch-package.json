@@ -1,0 +1,16 @@
+{
+  "name": "generals-conquest-server",
+  "version": "1.0.0",
+  "description": "《将领：征服》联机对战服务器",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}
