@@ -13,7 +13,9 @@ dist-ssr
 netlify-upload
 render-upload
 card_data_export
+skill_summary_export
 scripts/__pycache__
+.vs
 *.local
 .env.production
 .env.local

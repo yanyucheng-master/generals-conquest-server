@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 从代码与卡牌数据生成「现行技能汇总表」。
-输出至 card_data_export/
+输出至 skill_summary_export/（xlsx/md/json）；含技能表的合并卡牌表仍输出至 card_data_export/
 """
 from __future__ import annotations
 
@@ -737,7 +737,7 @@ def main() -> None:
             order.append(sk)
 
     md_path = OUT_DIR_OTHER / f"现行技能汇总_{TODAY}.md"
-    xlsx_path = OUT_DIR_XLSX / f"现行技能汇总_{TODAY}.xlsx"
+    xlsx_path = OUT_DIR_OTHER / f"现行技能汇总_{TODAY}.xlsx"
     json_path = OUT_DIR_OTHER / f"现行技能汇总_{TODAY}.json"
 
     write_markdown(md_path, order, usage)
