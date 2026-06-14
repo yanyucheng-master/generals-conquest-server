@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { Faction } from '@/types/game';
 import { FACTIONS } from '@/data/cards';
 import { Shield, Crosshair, Sparkles, Swords, BookOpen, Layers, AlertTriangle, ArrowLeft } from 'lucide-react';
-import { loadDeck, validateDeck } from '@/data/diySystem';
+import { loadDeck, loadDIYCards, validateDeck } from '@/data/diySystem';
 import { ALL_CARDS } from '@/data/cards';
 import TutorialPage from './TutorialPage';
 
@@ -15,17 +15,16 @@ interface Props {
 // ======== 我的军团卡片（手机端小版）========
 function CustomFactionCardMobile({ onSelect }: { onSelect: () => void }) {
   const deck = loadDeck();
-  const isReady = deck.length === 40;
+  const isReady = validateDeck(deck, ALL_CARDS, loadDIYCards()).valid;
 
   return (
     <button
       onClick={onSelect}
-      className="relative w-full h-full rounded-xl overflow-hidden cursor-pointer transition-all duration-300 transform active:scale-[0.98]"
+      className="faction-card-release relative w-full h-full rounded-xl overflow-hidden cursor-pointer transition-all duration-300 transform active:scale-[0.98]"
       style={{ boxShadow: `0 6px 20px rgba(0,0,0,0.5)` }}
     >
-      <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-teal-950 to-cyan-950" />
-      <div className="absolute inset-0 bg-[url('/bg_war_table.jpg')] bg-cover bg-center opacity-20" />
-      <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(16,185,129,0.9) 0%, rgba(16,185,129,0.6) 30%, transparent 70%)' }} />
+      <div className="absolute inset-0 bg-[url('/unit-custom-commander.jpg')] bg-cover bg-center" />
+      <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(3,45,35,0.96) 0%, rgba(5,60,45,0.68) 35%, rgba(0,0,0,0.08) 72%)' }} />
       <div className="absolute bottom-0 left-0 right-0 p-3 text-left">
         <div className="flex items-center gap-1.5 mb-1">
           <Layers className="w-4 h-4 text-emerald-400" />
@@ -47,18 +46,17 @@ function CustomFactionCardMobile({ onSelect }: { onSelect: () => void }) {
 // ======== 我的军团卡片（桌面端）========
 function CustomFactionCard({ onSelect }: { onSelect: () => void }) {
   const deck = loadDeck();
-  const isReady = deck.length === 40;
-  const counts = validateDeck(deck, ALL_CARDS, []);
+  const counts = validateDeck(deck, ALL_CARDS, loadDIYCards());
+  const isReady = counts.valid;
 
   return (
     <button
       onClick={onSelect}
-      className="relative w-56 h-72 rounded-xl overflow-hidden cursor-pointer transition-all duration-300 transform hover:scale-[1.03] hover:-translate-y-1"
+      className="faction-card-release relative w-56 h-72 rounded-xl overflow-hidden cursor-pointer transition-all duration-300 transform hover:scale-[1.03] hover:-translate-y-1"
       style={{ boxShadow: `0 8px 24px rgba(0,0,0,0.5)` }}
     >
-      <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-teal-950 to-cyan-950" />
-      <div className="absolute inset-0 bg-[url('/bg_war_table.jpg')] bg-cover bg-center opacity-20" />
-      <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(16,185,129,0.9) 0%, rgba(16,185,129,0.6) 30%, transparent 70%)' }} />
+      <div className="absolute inset-0 bg-[url('/unit-custom-commander.jpg')] bg-cover bg-center" />
+      <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(3,45,35,0.96) 0%, rgba(5,60,45,0.68) 35%, rgba(0,0,0,0.08) 72%)' }} />
       <div className="absolute bottom-0 left-0 right-0 p-4 text-left">
         <div className="flex items-center gap-2 mb-1.5">
           <Layers className="w-5 h-5 text-emerald-400" />
@@ -97,7 +95,7 @@ export default function FactionSelect({ onSelect, onSelectCustom, onBack }: Prop
 
   const handleCustomSelect = () => {
     const deck = loadDeck();
-    if (deck.length === 40) {
+    if (validateDeck(deck, ALL_CARDS, loadDIYCards()).valid) {
       if (onSelectCustom) onSelectCustom();
     } else {
       setShowCustomWarning(true);
@@ -118,9 +116,10 @@ export default function FactionSelect({ onSelect, onSelectCustom, onBack }: Prop
   };
 
   return (
-    <div className="relative w-full min-h-screen overflow-y-auto">
-      <div className="absolute inset-0 bg-cover bg-center z-0" style={{ backgroundImage: 'url(/bg_war_table.jpg)' }} />
-      <div className="absolute inset-0 bg-black/65 z-[1]" />
+    <div className="release-screen w-full min-h-screen overflow-y-auto">
+      <div className="release-backdrop release-backdrop-menu" />
+      <div className="release-vignette" />
+      <div className="release-grain" />
 
       <div className="relative z-10 flex flex-col items-center gap-4 sm:gap-5 px-3 sm:px-4 py-6 sm:py-8">
         {/* 返回按钮 */}
@@ -128,7 +127,7 @@ export default function FactionSelect({ onSelect, onSelectCustom, onBack }: Prop
           <div className="w-full max-w-3xl shrink-0">
             <button
               onClick={onBack}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-gray-300 hover:bg-gray-800/80 hover:text-white transition-colors cursor-pointer border border-gray-700/50"
+              className="release-back-button"
             >
               <ArrowLeft className="w-3.5 h-3.5" /> 返回主菜单
             </button>
@@ -166,7 +165,7 @@ export default function FactionSelect({ onSelect, onSelectCustom, onBack }: Prop
                 <button
                   key={f.id}
                   onClick={() => handleSelect(f.id)}
-                  className={`relative w-40 shrink-0 snap-center rounded-xl overflow-hidden cursor-pointer transition-all duration-300 transform ${isSelected ? 'scale-[1.02] ring-2 ring-yellow-500' : 'active:scale-[0.98]'}`}
+                  className={`faction-card-release relative w-40 shrink-0 snap-center rounded-xl overflow-hidden cursor-pointer transition-all duration-300 transform ${isSelected ? 'scale-[1.02] ring-2 ring-yellow-500' : 'active:scale-[0.98]'}`}
                   style={{ boxShadow: `0 6px 20px rgba(0,0,0,0.5)`, aspectRatio: '3/4' }}
                 >
                   <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${factionImages[f.id]})` }} />
@@ -200,7 +199,7 @@ export default function FactionSelect({ onSelect, onSelectCustom, onBack }: Prop
                 <button
                   key={f.id}
                   onClick={() => handleSelect(f.id)}
-                  className={`relative w-56 h-72 rounded-xl overflow-hidden cursor-pointer transition-all duration-300 transform ${isSelected ? 'scale-105 ring-3 ring-yellow-500' : 'hover:scale-[1.03] hover:-translate-y-1'}`}
+                  className={`faction-card-release relative w-56 h-72 rounded-xl overflow-hidden cursor-pointer transition-all duration-300 transform ${isSelected ? 'scale-105 ring-3 ring-yellow-500' : 'hover:scale-[1.03] hover:-translate-y-1'}`}
                   style={{ boxShadow: `0 8px 24px rgba(0,0,0,0.5)` }}
                 >
                   <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${factionImages[f.id]})` }} />

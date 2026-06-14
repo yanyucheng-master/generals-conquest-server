@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
-import type { GameState, Faction, BoardKey, AttackLine, CardDef } from '@/types/game';
+import { SKILL_LABELS } from '@/types/game';
+import type { GameState, Faction, BoardKey, AttackLine, CardDef, Skill, LogEntry } from '@/types/game';
 import {
   createGame,
   deployUnit,
@@ -29,6 +30,194 @@ interface FloatText {
   color: string; // tailwind text color class
 }
 
+interface SkillTriggerRule {
+  skill: Skill;
+  pattern: RegExp;
+}
+
+const SKILL_TRIGGER_RULES: SkillTriggerRule[] = [
+  { skill: 'refreshBoost', pattern: /刷新增幅/ },
+  { skill: 'cleanseSilence', pattern: /净化沉默/ },
+  { skill: 'aoeHeal', pattern: /群体治疗\d+/ },
+  { skill: 'healHQ', pattern: /(?:总部|敌方HQ)(?:恢复|回复)\d+点生命/ },
+  { skill: 'flashStrike', pattern: /\s闪击！/ },
+  { skill: 'magicSwap', pattern: /(?:魔术：|疾风步：|：交换了|交换位置)/ },
+  { skill: 'bleed', pattern: /(?:流血\+\d+|附加流血\+\d+|流血\s+\d+点伤害)/ },
+  { skill: 'poison', pattern: /(?:中毒\+\d+|附加中毒\+\d+)/ },
+  { skill: 'poisonBurst', pattern: /毒爆！/ },
+  { skill: 'tear', pattern: /撕裂！/ },
+  { skill: 'growth', pattern: /生长\d+/ },
+  { skill: 'balance', pattern: /均衡\d+/ },
+  { skill: 'magicBoost', pattern: /法力增幅(?:\d+|：|再)/ },
+  { skill: 'silence', pattern: /沉默\d+：/ },
+  { skill: 'holyLight', pattern: /圣光：/ },
+  { skill: 'riddleRealm', pattern: /谜境激活/ },
+  { skill: 'lifesteal', pattern: /吸血：恢复/ },
+  { skill: 'dodge', pattern: /闪避了攻击/ },
+  { skill: 'fly', pattern: /飞翔闪避/ },
+  { skill: 'spellReflect', pattern: /反弹法术/ },
+  { skill: 'piercePlus', pattern: /强化贯穿：/ },
+  { skill: 'ambush', pattern: /\s伏击\s.+\s\d+点/ },
+  { skill: 'counter', pattern: /\s反击\s.+\s\d+点/ },
+  { skill: 'extract', pattern: /萃取\s+\+\d+金币/ },
+  { skill: 'bounty', pattern: /悬赏：/ },
+  { skill: 'revenge', pattern: /复仇攻击/ },
+  { skill: 'jamming', pattern: /干扰生效/ },
+  { skill: 'agile', pattern: /疾行移动/ },
+  { skill: 'interest', pattern: /\s利息\s+\+\d+金币/ },
+  { skill: 'heal', pattern: /(?:^|\s)治疗\d+\s*→/ },
+  { skill: 'armor', pattern: /获得\d+点护甲/ },
+  { skill: 'shield', pattern: /护盾术\s*→/ },
+  { skill: 'focusFire', pattern: /集火目标已标记/ },
+  { skill: 'immune', pattern: /免疫(?:法术|末日审判)/ },
+  { skill: 'destroy', pattern: /末日审判\s*→.+被消灭/ },
+  { skill: 'drawCard', pattern: /：抽取?\d+张/ },
+  { skill: 'discard', pattern: /：(?:对手|我方)弃掉/ },
+  { skill: 'fog', pattern: /迷雾：/ },
+];
+
+const SKILL_VALUE_PATTERNS: Partial<Record<Skill, RegExp[]>> = {
+  bleed: [/流血\+(\d+)/, /附加流血\+(\d+)/, /流血\s+(\d+)点伤害/],
+  poison: [/中毒\+(\d+)/, /附加中毒\+(\d+)/],
+  ambush: [/伏击.*?(\d+)点/],
+  growth: [/生长(\d+)/],
+  balance: [/均衡(\d+)/],
+  magicBoost: [/法力增幅(\d+)/, /法力增幅.*?\+(\d+)攻/],
+  silence: [/沉默(\d+)/],
+  interest: [/利息\s+\+(\d+)金币/],
+  heal: [/治疗(\d+)/],
+  aoeHeal: [/群体治疗(\d+)/],
+  armor: [/获得(\d+)点护甲/],
+  shield: [/\+(\d+)护甲/],
+  drawCard: [/抽取?(\d+)张/],
+  healHQ: [/(?:总部|敌方HQ)(?:恢复|回复)(\d+)点生命/],
+  extract: [/萃取\s+\+(\d+)金币/],
+};
+
+const SKILL_FLOAT_COLORS: Partial<Record<Skill, string>> = {
+  flashStrike: 'text-yellow-300',
+  bleed: 'text-red-500',
+  tear: 'text-red-400',
+  poison: 'text-emerald-400',
+  poisonBurst: 'text-green-400',
+  heal: 'text-green-400',
+  aoeHeal: 'text-green-400',
+  shield: 'text-blue-400',
+  armor: 'text-blue-400',
+  magicBoost: 'text-purple-300',
+  destroy: 'text-red-500',
+  silence: 'text-slate-300',
+  fog: 'text-slate-300',
+  dodge: 'text-cyan-300',
+  fly: 'text-cyan-300',
+  counter: 'text-orange-400',
+  ambush: 'text-yellow-400',
+};
+
+function getSkillFloatColor(skill: Skill): string {
+  return SKILL_FLOAT_COLORS[skill] ?? 'text-amber-300';
+}
+
+function getSkillFloatText(skill: Skill, msg: string): string {
+  const value = SKILL_VALUE_PATTERNS[skill]
+    ?.map(pattern => msg.match(pattern)?.[1])
+    .find(Boolean);
+  return `${SKILL_LABELS[skill] ?? skill}${value ?? ''}`;
+}
+
+function hasVisibleSkill(skills: Skill[]): boolean {
+  return skills.some(skill => Boolean(SKILL_LABELS[skill]));
+}
+
+function hasTriggeredSkill(logs: LogEntry[]): boolean {
+  return logs.some(log => SKILL_TRIGGER_RULES.some(rule => rule.pattern.test(log.msg)));
+}
+
+function findTriggerUnitKeysByName(state: GameState, msg: string): BoardKey[] {
+  const matches: { key: BoardKey; index: number }[] = [];
+  for (const [key, unit] of Object.entries(state.enemy.board)) {
+    const index = msg.indexOf(unit.name);
+    if (index >= 0) matches.push({ key, index });
+  }
+  for (const [key, unit] of Object.entries(state.player.board)) {
+    const index = msg.indexOf(unit.name);
+    if (index >= 0) matches.push({ key, index });
+  }
+  if (matches.length === 0) return [];
+  const firstIndex = Math.min(...matches.map(match => match.index));
+  const firstMatches = matches.filter(match => match.index === firstIndex);
+  return firstMatches.length === 1 ? [firstMatches[0].key] : [];
+}
+
+function findUniqueUnitKeyByExactName(state: GameState, name: string): BoardKey[] {
+  const matches = [
+    ...Object.entries(state.enemy.board),
+    ...Object.entries(state.player.board),
+  ].filter(([, unit]) => unit.name === name);
+  return matches.length === 1 ? [matches[0][0]] : [];
+}
+
+function getExplicitSourceName(skill: Skill, msg: string): string | null {
+  const patterns: Partial<Record<Skill, RegExp>> = {
+    flashStrike: /⚡\s(.+?)\s闪击！/,
+    ambush: /⚡\s(.+?)\s伏击\s/,
+    counter: /🔄\s(.+?)\s反击\s/,
+    revenge: /😠\s(.+?)\s复仇攻击/,
+    interest: /💰\s(.+?)\s利息\s/,
+    agile: /🏃\s(.+?)\s疾行移动/,
+    magicBoost: /✨\s(.+?)\s法力增幅/,
+    armor: /🛡️\s(.+?)\s获得\d+点护甲/,
+    drawCard: /📥\s(.+?)：抽取\d+张/,
+    silence: /🔇\s(.+?)\s沉默\d+：/,
+    holyLight: /✨\s(.+?)\s圣光：/,
+    riddleRealm: /🔮\s(.+?)\s谜境激活/,
+    magicSwap: /🪄\s(.+?)：/,
+    lifesteal: /💚\s(.+?)\s吸血：/,
+    extract: /💰\s(.+?)\s萃取\s/,
+    heal: /💚\s(.+?)\s治疗\d+\s*→/,
+    bleed: /🩸\s(.+?)\s对(?:总部|\s.+?\s)附加流血\+\d+/,
+    poison: /☠️\s(.+?)\s对(?:总部|\s.+?\s)附加中毒\+\d+/,
+    tear: /🔪\s(.+?)\s撕裂！/,
+    poisonBurst: /💣\s(.+?)\s毒爆！/,
+    piercePlus: /💥\s(.+?)\s强化贯穿：/,
+  };
+  return msg.match(patterns[skill] ?? /$a/)?.[1] ?? null;
+}
+
+function getSideHqKey(log: LogEntry): BoardKey | null {
+  if (log.type === 'player') return '3-1';
+  if (log.type === 'enemy') return '0-1';
+  return null;
+}
+
+function getExplicitHqKey(log: LogEntry): BoardKey | null {
+  return /(?:HQ|总部)/.test(log.msg) ? getSideHqKey(log) : null;
+}
+
+function isSourceOnlyTrigger(skill: Skill): boolean {
+  return skill === 'lifesteal'
+    || skill === 'piercePlus'
+    || skill === 'extract'
+    || skill === 'tear'
+    || skill === 'poisonBurst';
+}
+
+function isSideScopedTrigger(skill: Skill): boolean {
+  return skill === 'balance'
+    || skill === 'silence'
+    || skill === 'holyLight'
+    || skill === 'riddleRealm'
+    || skill === 'focusFire'
+    || skill === 'refreshBoost'
+    || skill === 'cleanseSilence'
+    || skill === 'drawCard'
+    || skill === 'discard'
+    || skill === 'fog'
+    || skill === 'magicSwap'
+    || skill === 'aoeHeal'
+    || skill === 'healHQ';
+}
+
 export function useGame() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [selectedCardIdx, setSelectedCardIdx] = useState<number | null>(null);
@@ -41,6 +230,7 @@ export function useGame() {
   const [aiDeploying, setAiDeploying] = useState(false);
   // 攻击连线
   const [attackLine, setAttackLine] = useState<AttackLine | null>(null);
+  const [skillLine, setSkillLine] = useState<AttackLine | null>(null);
   // 技能飘字
   const [skillFloats, setSkillFloats] = useState<FloatText[]>([]);
 
@@ -49,6 +239,8 @@ export function useGame() {
   const isMultiplayerModeRef = useRef(false);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const idRef = useRef(0);
+  const animatedLogIdsRef = useRef<Set<number>>(new Set());
+  const runFullAIResponseRef = useRef<() => void>(() => {});
 
   const clearTimers = () => {
     timersRef.current.forEach(t => clearTimeout(t));
@@ -97,6 +289,16 @@ export function useGame() {
     addTimer(() => setSkillFloats(prev => prev.filter(p => p.id !== id)), 1500);
   }, []);
 
+  const showSkillLine = useCallback((from: BoardKey, to: BoardKey, duration = 760) => {
+    setSkillLine({ from, to });
+    addTimer(() => setSkillLine(null), duration);
+  }, []);
+
+  const showAttackLine = useCallback((from: BoardKey, to: BoardKey, duration = 760) => {
+    setAttackLine({ from, to });
+    addTimer(() => setAttackLine(null), duration);
+  }, []);
+
   // 显示格子震动
   const showShake = useCallback((key: BoardKey) => {
     setShakeCell(key);
@@ -115,75 +317,42 @@ export function useGame() {
 
   // 解析log中的技能触发，生成飘字
   const parseSkillFloats = useCallback((state: GameState) => {
-    const recentLogs = state.log.slice(-5);
+    const recentLogs = state.log;
     for (const log of recentLogs) {
-      const msg = log.msg;
-      // 在对应单位上飘技能名称
-      const skillPatterns: { pattern: string; text: string; color: string }[] = [
-        // ⚠️ 匹配顺序：长的在前，避免"闪避"先于"飞翔闪避"匹配
-        { pattern: '飞翔闪避', text: '🕊️ 飞翔闪避!', color: 'text-cyan-300' },
-        { pattern: '法力增幅', text: '✨ 法力增幅!', color: 'text-purple-300' },
-        { pattern: '护甲抵消', text: '🛡️ 抵消!', color: 'text-blue-400' },
-        { pattern: '护甲破碎', text: '💥 破碎!', color: 'text-orange-400' },
-        { pattern: '反弹法术', text: '🔮 反弹!', color: 'text-purple-400' },
-        { pattern: '闪击', text: '⚡ 闪击!', color: 'text-yellow-300' },
-        { pattern: '毒爆', text: '💣 毒爆!', color: 'text-green-400' },
-        { pattern: '撕裂', text: '🔪 撕裂!', color: 'text-red-400' },
-        { pattern: '流血', text: '🩸 流血!', color: 'text-red-500' },
-        { pattern: '伏击', text: '⚡ 伏击!', color: 'text-yellow-400' },
-        { pattern: '闪避', text: '💨 闪避!', color: 'text-green-400' },
-        { pattern: '吸血', text: '💚 吸血!', color: 'text-pink-400' },
-        { pattern: '萃取', text: '💰 萃取!', color: 'text-yellow-400' },
-        { pattern: '复仇', text: '😠 复仇!', color: 'text-red-400' },
-        { pattern: '冻结', text: '❄️ 冻结!', color: 'text-cyan-400' },
-        { pattern: '沉默', text: '🔇 沉默!', color: 'text-gray-400' },
-        { pattern: '叱吓', text: '😤 叱吓!', color: 'text-red-300' },
-        { pattern: '嘲讽', text: '🛡️ 嘲讽!', color: 'text-blue-300' },
-        { pattern: '贯穿', text: '🔱 贯穿!', color: 'text-orange-300' },
-        { pattern: '强运', text: '🍀 强运!', color: 'text-green-300' },
-        { pattern: '利息', text: '💰 利息!', color: 'text-yellow-300' },
-        { pattern: '悬赏', text: '💎 悬赏!', color: 'text-yellow-300' },
-        { pattern: '生长', text: '🌱 生长!', color: 'text-green-300' },
-        { pattern: '迷雾', text: '🌫️ 迷雾!', color: 'text-gray-300' },
-        { pattern: '均衡', text: '⚖️ 均衡!', color: 'text-blue-300' },
-        { pattern: '谜境', text: '🔮 谜境!', color: 'text-purple-300' },
-        { pattern: '疾风步', text: '💨 疾风步!', color: 'text-cyan-300' },
-        { pattern: '魔术', text: '🪄 魔术!', color: 'text-pink-300' },
-        { pattern: '护盾术', text: '🛡️ 护盾!', color: 'text-blue-400' },
-        { pattern: '集火令', text: '🎯 集火!', color: 'text-red-400' },
-        { pattern: '反击', text: '🔄 反击!', color: 'text-orange-400' },
-        { pattern: '狙击', text: '🎯 狙击!', color: 'text-purple-400' },
-        { pattern: '荒野呼唤', text: '🌿 呼唤!', color: 'text-green-400' },
-      ];
+      if (animatedLogIdsRef.current.has(log.id)) continue;
+      animatedLogIdsRef.current.add(log.id);
+      const rule = SKILL_TRIGGER_RULES.find(candidate => candidate.pattern.test(log.msg));
+      if (!rule) continue;
 
-      for (const sp of skillPatterns) {
-        if (msg.includes(sp.pattern)) {
-          // 找到单位所在的格子
-          const unitKeys = findUnitKeysByName(state, msg);
-          for (const uk of unitKeys) {
-            showSkillFloat(uk, sp.text, sp.color);
-          }
-          break;
-        }
+      const explicitSourceName = getExplicitSourceName(rule.skill, log.msg);
+      const unitKeys = explicitSourceName
+        ? findUniqueUnitKeyByExactName(state, explicitSourceName)
+        : findTriggerUnitKeysByName(state, log.msg);
+      const unresolvedNamedSource = explicitSourceName !== null
+        && unitKeys.length === 0
+        && !isSideScopedTrigger(rule.skill);
+      const hqKey = getExplicitHqKey(log);
+      const sideKey = isSideScopedTrigger(rule.skill) ? getSideHqKey(log) : null;
+      const activeAttackerKey = state.attackingUnit && !explicitSourceName && isSourceOnlyTrigger(rule.skill)
+        ? state.attackingUnit
+        : null;
+      const targetKeys = unresolvedNamedSource
+        ? []
+        : activeAttackerKey
+        ? [activeAttackerKey]
+        : unitKeys.length > 0
+          ? unitKeys
+          : hqKey
+            ? [hqKey]
+            : sideKey
+              ? [sideKey]
+              : [];
+
+      for (const targetKey of targetKeys) {
+        showSkillFloat(targetKey, getSkillFloatText(rule.skill, log.msg), getSkillFloatColor(rule.skill));
       }
     }
   }, [showSkillFloat]);
-
-  // 根据log中的单位名称找到格子
-  const findUnitKeysByName = (state: GameState, msg: string): BoardKey[] => {
-    const keys: BoardKey[] = [];
-    for (const [k, u] of Object.entries(state.enemy.board)) {
-      if (msg.includes(u.name)) { keys.push(k as BoardKey); break; }
-    }
-    for (const [k, u] of Object.entries(state.player.board)) {
-      if (msg.includes(u.name)) { keys.push(k as BoardKey); break; }
-    }
-    // 如果没找到具体单位，返回HQ
-    if (keys.length === 0) {
-      if (msg.includes('总部') || msg.includes('HQ')) keys.push('0-1');
-    }
-    return keys;
-  };
 
   // 检测伤害并触发特效
   const detectDamage = useCallback((beforeHps: Record<string, number>, state: GameState) => {
@@ -268,10 +437,17 @@ export function useGame() {
       const s = gameRef.current;
       if (!s || s.gameOver) { onComplete(); return; }
 
+      const logStart = s.log.length;
       const result = doAITurnDeploy(s);
       if (result) {
         const key: BoardKey = `${result.row}-${result.col}`;
-        showDeployFlash(key);
+        const deployedUnit = result.row >= 0 ? s.enemy.board[key] : null;
+        if (deployedUnit?.name === result.cardName) {
+          showDeployFlash(key);
+        } else if (hasTriggeredSkill(s.log.slice(logStart))) {
+          showSkillLine('0-1', result.row >= 0 ? key : '3-1');
+        }
+        parseSkillFloats(s);
         syncState();
         addTimer(tryDeploy, 1200);
       } else {
@@ -284,7 +460,7 @@ export function useGame() {
       tryDeploy();
       addTimer(() => setAiDeploying(false), 100);
     }, 500);
-  }, [syncState, showDeployFlash]);
+  }, [syncState, showDeployFlash, showSkillLine, parseSkillFloats]);
 
   const startGame = useCallback((playerFaction: Faction, playerCustomCards?: CardDef[], enemyCustomCards?: CardDef[]) => {
     const factions: Faction[] = ['empire', 'wild', 'arcane'];
@@ -295,7 +471,9 @@ export function useGame() {
     setSelectedCardIdx(null);
     setAnimating(false);
     setAttackLine(null);
+    setSkillLine(null);
     setSkillFloats([]);
+    animatedLogIdsRef.current.clear();
     clearTimers();
 
     addTimer(() => {
@@ -328,9 +506,13 @@ export function useGame() {
 
     if (state.sniperMode && state.sniperQueue.length > 0) {
       if (row >= 2) return;
+      const sniper = state.sniperQueue[0];
+      const sniperEntry = Object.entries(state.player.board).find(([, unit]) => unit.uid === sniper.uid);
+      if (sniperEntry) showAttackLine(sniperEntry[0] as BoardKey, key, 900);
       resolveSniper(state, key);
+      parseSkillFloats(state);
       syncState();
-      runFullAIResponse();
+      runFullAIResponseRef.current();
       return;
     }
 
@@ -338,6 +520,7 @@ export function useGame() {
       if (agileSourceKey) {
         if (moveAgileUnit(state, agileSourceKey, key, 'player')) {
           showDeployFlash(key);
+          parseSkillFloats(state);
           setAgileSourceKey(null);
           syncState();
         } else {
@@ -366,23 +549,16 @@ export function useGame() {
       if (row === 3 && col === 1) return;
       if (deployUnit(state, selectedCardIdx, row, col, 'player')) {
         showDeployFlash(key);
+        parseSkillFloats(state);
         setSelectedCardIdx(null);
         syncState();
-        // 沉默：部署后200ms在敌方所有单位上显示沉默飘字
-        if (card.skills.includes('silence')) {
-          addTimer(() => {
-            const g = gameRef.current;
-            if (!g) return;
-            for (const enemyKey of Object.keys(g.enemy.board)) {
-              showSkillFloat(enemyKey as BoardKey, '🔇 沉默!', 'text-gray-400');
-            }
-          }, 200);
-        }
       }
     } else if (card.type === '法术') {
       if (card.name === '天火降临' || card.name === '混乱风暴') {
+        const logStart = state.log.length;
         castSpell(state, selectedCardIdx, null, 'player');
-        showSkillFloat('0-1', card.name === '天火降临' ? '🔥 天火!' : '🌪️ 混乱!', card.name === '天火降临' ? 'text-orange-400' : 'text-purple-300');
+        if (hasTriggeredSkill(state.log.slice(logStart))) showSkillLine('3-1', '0-1', 900);
+        parseSkillFloats(state);
         setSelectedCardIdx(null);
         syncState();
         return;
@@ -392,67 +568,53 @@ export function useGame() {
         // 免疫单位不能被法术指定（末日审判也受免疫影响）
         const targetUnit = state.enemy.board[key];
         if (targetUnit && targetUnit.skills.includes('immune')) return;
+        const logStart = state.log.length;
         castSpell(state, selectedCardIdx, key, 'player');
-        // 法术飘字
-        if (card.skills.includes('destroy')) {
-          showSkillFloat(key, '☠️ 消灭!', 'text-red-500');
-        } else {
-          showSkillFloat(key, '💥 法术!', 'text-purple-400');
-        }
+        if (hasTriggeredSkill(state.log.slice(logStart))) showSkillLine('3-1', key);
+        parseSkillFloats(state);
         setSelectedCardIdx(null);
         syncState();
       } else if (card.skills.includes('shield')) {
         if (row !== 2 && row !== 3) return;
         const targetExists = row === 3 && col === 1 ? true : !!state.player.board[key];
         if (targetExists) {
+          const logStart = state.log.length;
           castSpell(state, selectedCardIdx, key, 'player');
-          showSkillFloat(key, '🛡️ 护盾!', 'text-blue-400');
+          if (hasTriggeredSkill(state.log.slice(logStart))) showSkillLine('3-1', key);
+          parseSkillFloats(state);
           setSelectedCardIdx(null);
           syncState();
         }
       } else if (card.skills.includes('tear') && card.skills.includes('poisonBurst')) {
         // 荒野呼唤：对指定单位使用
         if (row < 0 || row > 1) return;
+        const logStart = state.log.length;
         castSpell(state, selectedCardIdx, key, 'player');
-        showSkillFloat(key, '🔪 撕裂!', 'text-red-400');
+        if (hasTriggeredSkill(state.log.slice(logStart))) showSkillLine('3-1', key);
+        parseSkillFloats(state);
         setSelectedCardIdx(null);
         syncState();
       } else if (card.skills.includes('magicSwap') && card.name === '疾风步') {
         // 疾风步：指定1个敌方单位
         if (row < 0 || row > 1) return;
+        const logStart = state.log.length;
         castSpell(state, selectedCardIdx, key, 'player');
-        showSkillFloat(key, '🪄 疾风步!', 'text-purple-400');
+        if (hasTriggeredSkill(state.log.slice(logStart))) showSkillLine('3-1', key);
+        parseSkillFloats(state);
         setSelectedCardIdx(null);
         syncState();
       } else {
+        const logStart = state.log.length;
         castSpell(state, selectedCardIdx, null, 'player');
-        // 根据法术类型飘字（均衡飘字在 combatPhaseStart 时统一显示）
-        if (card.skills.includes('magicSwap')) {
-          showSkillFloat('0-1', '🪄 魔术!', 'text-purple-400');
-        } else if (card.skills.includes('fog')) {
-          showSkillFloat('3-1', '🌫️ 迷雾!', 'text-gray-400');
-        } else if (card.skills.includes('silence')) {
-          showSkillFloat('0-1', '🔇 沉默!', 'text-gray-400');
-        } else if (card.skills.includes('refreshBoost')) {
-          showSkillFloat('3-1', '✨ 刷新增幅!', 'text-purple-300');
-        } else if (card.skills.includes('cleanseSilence')) {
-          showSkillFloat('3-1', '🌟 净化!', 'text-green-300');
-        } else if (card.skills.includes('heal')) {
-          showSkillFloat(key, '💚 治疗!', 'text-green-400');
-        } else if (card.skills.includes('aoeHeal')) {
-          showSkillFloat('3-1', '💚 群体治疗!', 'text-green-400');
-        } else if (card.skills.includes('drawCard')) {
-          showSkillFloat('3-1', '📜 抽卡!', 'text-blue-400');
-        } else if (card.skills.includes('discard')) {
-          showSkillFloat('0-1', '🗑️ 弃牌!', 'text-orange-400');
-        } else if (card.skills.includes('healHQ')) {
-          showSkillFloat('3-1', '💚 总部恢复!', 'text-green-400');
+        if (hasVisibleSkill(card.skills) && hasTriggeredSkill(state.log.slice(logStart))) {
+          showSkillLine('3-1', card.skills.includes('healHQ') || card.skills.includes('aoeHeal') ? '3-1' : '0-1', 900);
         }
+        parseSkillFloats(state);
         setSelectedCardIdx(null);
         syncState();
       }
     }
-  }, [selectedCardIdx, syncState, showDeployFlash]);
+  }, [selectedCardIdx, agileSourceKey, syncState, showDeployFlash, showSkillLine, showAttackLine, parseSkillFloats]);
 
   const handleEndTurn = useCallback((onComplete?: () => void) => {
     const state = gameRef.current;
@@ -477,8 +639,8 @@ export function useGame() {
     }
 
     // 战斗阶段开始：触发部署自带的均衡等技能，如有均衡则显示飘字
-    const hasBalance = combatPhaseStart(state, 'player');
-    if (hasBalance) showSkillFloat('3-1', '⚖️ 均衡!', 'text-yellow-400');
+    combatPhaseStart(state, 'player');
+    parseSkillFloats(state);
 
     runAttackSequence('player', () => {
       const s = gameRef.current;
@@ -493,6 +655,7 @@ export function useGame() {
       }
 
       doAITurnResource(s);
+      parseSkillFloats(s);
       syncState();
 
       runAIDeploySequence(() => {
@@ -500,6 +663,7 @@ export function useGame() {
           const final = gameRef.current;
           if (!final || final.gameOver) { setAnimating(false); onComplete?.(); return; }
           advanceToPlayerTurn(final);
+          parseSkillFloats(final);
           syncState();
 
           addTimer(() => {
@@ -521,23 +685,26 @@ export function useGame() {
         });
       });
     });
-  }, [syncState, runAttackSequence, runAIDeploySequence]);
+  }, [syncState, runAttackSequence, runAIDeploySequence, parseSkillFloats]);
 
   const runFullAIResponse = useCallback(() => {
     setAnimating(true);
     const s = gameRef.current;
     if (!s || s.gameOver) { setAnimating(false); return; }
     doAITurnResource(s);
+    parseSkillFloats(s);
     syncState();
 
     // ✅ AI回合战斗阶段开始：触发部署自带的均衡等技能
     combatPhaseStart(s, 'enemy');
+    parseSkillFloats(s);
 
     runAIDeploySequence(() => {
       runAttackSequence('enemy', () => {
         const final = gameRef.current;
         if (!final || final.gameOver) { setAnimating(false); return; }
         advanceToPlayerTurn(final);
+        parseSkillFloats(final);
         syncState();
         addTimer(() => {
           if (gameRef.current) {
@@ -555,23 +722,28 @@ export function useGame() {
         syncState();
       });
     });
-  }, [syncState, runAttackSequence, runAIDeploySequence]);
+  }, [syncState, runAttackSequence, runAIDeploySequence, parseSkillFloats]);
+  runFullAIResponseRef.current = runFullAIResponse;
 
   // 联机模式专用：狙击目标选择后继续执行攻击序列
   const snipeAndAttack = useCallback((targetKey: BoardKey, onComplete: () => void) => {
     const state = gameRef.current;
     if (!state) { onComplete(); return; }
+    const sniper = state.sniperQueue[0];
+    const sniperEntry = sniper && Object.entries(state.player.board).find(([, unit]) => unit.uid === sniper.uid);
+    if (sniperEntry) showAttackLine(sniperEntry[0] as BoardKey, targetKey, 900);
     resolveSniper(state, targetKey);
+    parseSkillFloats(state);
     syncState();
     // ✅ 战斗阶段开始：触发部署自带的均衡等技能
-    const hasBalanceSnipe = combatPhaseStart(state, 'player');
-    if (hasBalanceSnipe) showSkillFloat('3-1', '⚖️ 均衡!', 'text-yellow-400');
+    combatPhaseStart(state, 'player');
+    parseSkillFloats(state);
     runAttackSequence('player', () => {
       setAnimating(false);
       syncState();
       onComplete();
     });
-  }, [syncState, runAttackSequence]);
+  }, [syncState, runAttackSequence, showAttackLine, parseSkillFloats]);
 
   const handleSurrender = useCallback((): boolean => {
     const state = gameRef.current;
@@ -597,7 +769,9 @@ export function useGame() {
     setShakeCell(null);
     setAiDeploying(false);
     setAttackLine(null);
+    setSkillLine(null);
     setSkillFloats([]);
+    animatedLogIdsRef.current.clear();
   }, []);
 
   const getHighlightCells = useCallback(() => {
@@ -608,7 +782,7 @@ export function useGame() {
     const cells = new Set<BoardKey>();
     if (card.type === '士兵') {
       if (state.player.spellOnlyNextTurn) return cells;
-      for (let r of [2, 3]) {
+      for (const r of [2, 3]) {
         for (let c = 0; c < 3; c++) {
           if (r === 3 && c === 1) continue;
           cells.add(`${r}-${c}`);
@@ -654,17 +828,17 @@ export function useGame() {
     const unit = state.sniperQueue[0];
     const targets = getTargetsInRange(state, unit, 'player');
     return new Set(targets.map(t => t.key));
-  }, [gameState?.sniperMode]);
+  }, []);
 
   const getEnemyFrontExists = useCallback(() => {
     if (!gameRef.current) return true;
     return !isRowEmpty(gameRef.current, 1);
-  }, [gameState]);
+  }, []);
 
   const getPlayerFrontExists = useCallback(() => {
     if (!gameRef.current) return true;
     return !isRowEmpty(gameRef.current, 2);
-  }, [gameState]);
+  }, []);
 
   // 设置联机模式（true=跳过AI回合）
   const setMultiplayerMode = useCallback((enabled: boolean) => {
@@ -679,6 +853,7 @@ export function useGame() {
   // 加载游戏状态（联机模式用，用种子创建游戏后加载）
   const loadGameState = useCallback((newState: GameState) => {
     gameRef.current = newState;
+    animatedLogIdsRef.current = new Set(newState.log.map(log => log.id));
     syncState();
   }, [syncState]);
 
@@ -686,15 +861,20 @@ export function useGame() {
   const mirrorEnemyDeployAt = useCallback((row: number, col: number, card: CardDef) => {
     if (!gameRef.current) return;
     mirrorEnemyDeploy(gameRef.current, card, row, col);
+    showDeployFlash(`${row}-${col}`);
+    parseSkillFloats(gameRef.current);
     syncState();
-  }, [syncState]);
+  }, [syncState, showDeployFlash, parseSkillFloats]);
 
   // 镜像敌方法术（联机同步用）：直接在 gameRef.current 上操作
   const mirrorEnemySpellAt = useCallback((card: CardDef, targetKey: BoardKey) => {
     if (!gameRef.current) return;
+    const logStart = gameRef.current.log.length;
     mirrorEnemySpell(gameRef.current, card, targetKey);
+    if (hasTriggeredSkill(gameRef.current.log.slice(logStart))) showSkillLine('0-1', targetKey);
+    parseSkillFloats(gameRef.current);
     syncState();
-  }, [syncState]);
+  }, [syncState, showSkillLine, parseSkillFloats]);
 
   // 执行指定方的攻击序列（联机模式用）
   const runAttackSequenceFor = useCallback((who: 'player' | 'enemy', onComplete: () => void) => {
@@ -706,8 +886,9 @@ export function useGame() {
     const state = gameRef.current;
     if (!state || state.gameOver) return;
     advanceToPlayerTurn(state);
+    parseSkillFloats(state);
     syncState();
-  }, [syncState]);
+  }, [syncState, parseSkillFloats]);
 
   return {
     gameState,
@@ -718,6 +899,7 @@ export function useGame() {
     shakeCell,
     aiDeploying,
     attackLine,
+    skillLine,
     skillFloats,
     startGame,
     selectCard,

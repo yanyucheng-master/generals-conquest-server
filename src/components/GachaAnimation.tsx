@@ -1,18 +1,23 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useEffect, useMemo, useState, type ComponentType } from 'react';
+import {
+  ChevronRight,
+  Crown,
+  Eye,
+  Gem,
+  Gift,
+  Package,
+  RotateCcw,
+  SkipForward,
+  Sparkles,
+  Swords,
+  X,
+  Zap,
+} from 'lucide-react';
 import type { DrawResult, Rarity } from '@/data/gacha';
-import { RARITY_COLORS, RARITY_NAMES } from '@/data/gacha';
+import { RARITY_NAMES } from '@/data/gacha';
+import { getVisibleSkillLabels } from '@/utils/skillLabels';
 
-// ===================== 类型定义 =====================
-type DrawState =
-  | 'closed'           // 关闭
-  | 'pack_opening'     // 卡包开箱动画中
-  | 'cards_showing'    // 卡牌背面展示，等待用户操作
-  | 'flipping'         // 单张翻转中
-  | 'all_opening'      // 打开全部动画中
-  | 'result_showing'   // 结果展示
-  | 'sorting'          // 结算排序动画中（十连）
-  | 'sorted'           // 已按品质排序（十连）
-  | 'restoring';       // 恢复原始顺序动画中（十连）
+type Stage = 'opening' | 'forecast' | 'reveal' | 'spotlight' | 'results';
 
 interface Props {
   results: DrawResult[];
@@ -22,783 +27,639 @@ interface Props {
   onDrawAgain: () => void;
 }
 
-// ===================== 常量 =====================
-const FLIP_DURATION = 600; // 单张翻转0.6秒
-const BATCH_DELAYS: Record<Rarity, number> = {
-  copper: 0,
-  silver: 100,
-  gold: 200,
-  rainbow: 300,
-};
-const FLY_DELAYS: Record<Rarity, number> = {
-  rainbow: 0,
-  gold: 100,
-  silver: 200,
-  copper: 300,
-};
-const COLS = 10; // 十连网格10列
-
-// ===================== 工具函数 =====================
-function sortByRarity(cards: DrawResult[]): DrawResult[] {
-  const order: Record<string, number> = { rainbow: 4, gold: 3, silver: 2, copper: 1 };
-  return [...cards].sort((a, b) => {
-    const d = order[b.rarity] - order[a.rarity];
-    return d !== 0 ? d : b.card.cost - a.card.cost;
-  });
+interface PackTheme {
+  label: string;
+  subtitle: string;
+  icon: ComponentType<{ className?: string }>;
+  shell: string;
+  accent: string;
+  border: string;
+  glow: string;
 }
 
-// ===================== 子组件 =====================
+const PACK_THEMES: Record<string, PackTheme> = {
+  普通卡包: {
+    label: '前线补给',
+    subtitle: '基础军备征召',
+    icon: Package,
+    shell: 'linear-gradient(145deg, #3b291c, #8b5a2b 48%, #261a14)',
+    accent: '#d6a56a',
+    border: '#8b633a',
+    glow: 'rgba(180, 116, 56, .42)',
+  },
+  贵族卡包: {
+    label: '贵族军函',
+    subtitle: '银辉精锐征召',
+    icon: Gift,
+    shell: 'linear-gradient(145deg, #1d2734, #718096 48%, #111827)',
+    accent: '#d9e2ec',
+    border: '#94a3b8',
+    glow: 'rgba(148, 163, 184, .48)',
+  },
+  大师卡包: {
+    label: '大师秘藏',
+    subtitle: '高阶战术征召',
+    icon: Gem,
+    shell: 'linear-gradient(145deg, #111c3d, #2456a6 48%, #090e25)',
+    accent: '#75b7ff',
+    border: '#3b82f6',
+    glow: 'rgba(59, 130, 246, .5)',
+  },
+  顶富卡包: {
+    label: '王庭宝库',
+    subtitle: '至高荣耀征召',
+    icon: Crown,
+    shell: 'linear-gradient(145deg, #2c1247, #7e22ce 45%, #180925)',
+    accent: '#f3b7ff',
+    border: '#c084fc',
+    glow: 'rgba(192, 132, 252, .55)',
+  },
+};
 
-// ---- 单张抽卡：卡包开箱动画 ----
-function PackOpening({ onDone }: { onDone: () => void }) {
-  const [shake, setShake] = useState(false);
-  useEffect(() => {
-    const t1 = setTimeout(() => setShake(true), 300);
-    const t2 = setTimeout(() => onDone(), 2000);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [onDone]);
+const DEFAULT_THEME = PACK_THEMES.普通卡包;
+
+const RARITY_META: Record<Rarity, {
+  label: string;
+  forecast: string;
+  color: string;
+  border: string;
+  soft: string;
+  glow: string;
+}> = {
+  copper: {
+    label: '铜',
+    forecast: '军备封印稳定',
+    color: '#e2a665',
+    border: '#9a6234',
+    soft: 'rgba(154, 98, 52, .18)',
+    glow: 'rgba(194, 119, 57, .35)',
+  },
+  silver: {
+    label: '银',
+    forecast: '银辉正在汇聚',
+    color: '#dce6f2',
+    border: '#94a3b8',
+    soft: 'rgba(148, 163, 184, .18)',
+    glow: 'rgba(203, 213, 225, .42)',
+  },
+  gold: {
+    label: '金',
+    forecast: '金色共鸣出现',
+    color: '#ffd65c',
+    border: '#eab308',
+    soft: 'rgba(234, 179, 8, .16)',
+    glow: 'rgba(250, 204, 21, .62)',
+  },
+  rainbow: {
+    label: '彩',
+    forecast: '检测到虹彩异象',
+    color: '#f5d0fe',
+    border: '#d946ef',
+    soft: 'rgba(217, 70, 239, .16)',
+    glow: 'rgba(217, 70, 239, .68)',
+  },
+};
+
+const RARITY_ORDER: Record<Rarity, number> = {
+  copper: 1,
+  silver: 2,
+  gold: 3,
+  rainbow: 4,
+};
+
+const FACTION_ART: Record<string, string> = {
+  帝国军团: '/unit_empire_champion.jpg',
+  荒野游侠: '/unit_wild_ranger.jpg',
+  奥术学院: '/unit_arcane_mage.jpg',
+  通用: '/main-menu-war-room.jpg',
+};
+
+function getHighest(results: DrawResult[]) {
+  return [...results].sort((a, b) => RARITY_ORDER[b.rarity] - RARITY_ORDER[a.rarity])[0];
+}
+
+function groupPacks(results: DrawResult[]) {
+  const packs: DrawResult[][] = [];
+  for (let index = 0; index < results.length; index += 5) {
+    packs.push(results.slice(index, index + 5));
+  }
+  return packs;
+}
+
+function RarityPips({ results }: { results: DrawResult[] }) {
+  const counts = useMemo(() => ({
+    copper: results.filter(result => result.rarity === 'copper').length,
+    silver: results.filter(result => result.rarity === 'silver').length,
+    gold: results.filter(result => result.rarity === 'gold').length,
+    rainbow: results.filter(result => result.rarity === 'rainbow').length,
+  }), [results]);
+
   return (
-    <div className="flex flex-col items-center gap-8">
-      <div
-        className={`w-32 h-44 rounded-xl flex items-center justify-center relative ${shake ? 'animate-pack-shake' : 'animate-pulse'}`}
-        style={{
-          background: 'linear-gradient(135deg, #8B6914, #DAA520, #8B6914)',
-          border: '3px solid #FFD700',
-          boxShadow: '0 0 20px rgba(218,165,32,0.5)',
-        }}
-      >
-        <div className="absolute inset-2 rounded-lg border border-amber-300/30" />
-        <span className="text-5xl font-bold text-amber-100" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>?</span>
-      </div>
-      <div className="text-amber-400 text-sm animate-pulse">正在打开卡包...</div>
+    <div className="flex flex-wrap items-center justify-center gap-2">
+      {(Object.keys(counts) as Rarity[]).map((rarity) => (
+        <div
+          key={rarity}
+          className="flex items-center gap-1.5 rounded-full border bg-black/30 px-2.5 py-1 text-[10px] font-black"
+          style={{ borderColor: `${RARITY_META[rarity].border}66`, color: RARITY_META[rarity].color }}
+        >
+          <span className="h-1.5 w-1.5 rounded-full" style={{ background: RARITY_META[rarity].color }} />
+          {RARITY_NAMES[rarity]} {counts[rarity]}
+        </div>
+      ))}
     </div>
   );
 }
 
-// ---- 十连：10个卡包堆叠 ----
-function PackStack({ onDone }: { onDone: () => void }) {
-  useEffect(() => {
-    const t = setTimeout(onDone, 1000);
-    return () => clearTimeout(t);
-  }, [onDone]);
-  return (
-    <div className="flex flex-col items-center gap-8">
-      <div className="relative w-48 h-56">
-        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
-          <div
-            key={i}
-            className="absolute w-32 h-44 rounded-xl flex items-center justify-center animate-pack-burst"
-            style={{
-              left: `${40 + (i - 4.5) * 6}px`,
-              top: `${20 + Math.sin(i * 0.7) * 10}px`,
-              zIndex: 10 - i,
-              background: 'linear-gradient(135deg, #8B6914, #DAA520, #8B6914)',
-              border: '2px solid #FFD700',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-              animationDelay: `${i * 0.05}s`,
-            }}
-          >
-            <span className="text-3xl font-bold text-amber-100">?</span>
-          </div>
-        ))}
-      </div>
-      <div className="text-amber-400 text-lg font-bold animate-pulse">十连召唤！</div>
-    </div>
-  );
-}
-
-// ---- 卡背 ----
-function CardBack({ size = 'normal', onClick, disabled = false }: {
-  size?: 'normal' | 'small';
-  onClick?: () => void;
-  disabled?: boolean;
-}) {
-  const isSmall = size === 'small';
+function PackSeal({ theme, opened = false, delay = 0 }: { theme: PackTheme; opened?: boolean; delay?: number }) {
+  const Icon = theme.icon;
   return (
     <div
-      onClick={disabled ? undefined : onClick}
-      className={`rounded-lg flex items-center justify-center select-none ${
-        disabled ? 'cursor-default' : 'cursor-pointer hover:scale-105'
-      } ${isSmall ? 'w-16 h-22 sm:w-20 sm:h-28' : 'w-24 h-36 sm:w-28 sm:h-40'}`}
+      className={`gacha-pack relative flex h-52 w-36 items-center justify-center overflow-hidden rounded-2xl sm:h-64 sm:w-44 ${opened ? 'gacha-pack-opened' : ''}`}
       style={{
-        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-        border: '2px solid #4a4a6a',
-        transition: 'transform 0.2s, box-shadow 0.2s',
+        background: theme.shell,
+        border: `2px solid ${theme.border}`,
+        boxShadow: `0 0 65px ${theme.glow}, inset 0 0 35px rgba(255,255,255,.08)`,
+        animationDelay: `${delay}ms`,
       }}
     >
-      <span
-        className={`font-bold opacity-50 ${isSmall ? 'text-2xl' : 'text-4xl'}`}
-        style={{ color: '#6a6a8a' }}
-      >?</span>
+      <div className="absolute inset-2 rounded-xl border border-white/15" />
+      <div className="absolute left-0 right-0 top-1/2 h-px bg-white/25 shadow-[0_0_14px_rgba(255,255,255,.8)]" />
+      <div className="absolute -left-10 top-5 h-16 w-56 rotate-[-15deg] bg-white/5" />
+      <div
+        className="relative flex h-20 w-20 items-center justify-center rounded-full border bg-black/35 sm:h-24 sm:w-24"
+        style={{ borderColor: `${theme.accent}88`, color: theme.accent }}
+      >
+        <Icon className="h-9 w-9 sm:h-11 sm:w-11" />
+        <div className="absolute inset-1 rounded-full border border-dashed border-white/20" />
+      </div>
+      <div className="absolute bottom-5 left-3 right-3 text-center">
+        <div className="text-sm font-black tracking-[0.16em] text-white">{theme.label}</div>
+        <div className="mt-1 text-[9px] uppercase tracking-[0.2em] text-white/45">{theme.subtitle}</div>
+      </div>
     </div>
   );
 }
 
-// ---- 卡牌正面（带翻转动画和光效）----
-function CardFront({ result, size = 'normal' }: {
+function CardFace({
+  result,
+  compact = false,
+  featured = false,
+  onClick,
+}: {
   result: DrawResult;
-  size?: 'normal' | 'small';
+  compact?: boolean;
+  featured?: boolean;
+  onClick?: () => void;
 }) {
-  const isSmall = size === 'small';
-  const colors = RARITY_COLORS[result.rarity];
   const card = result.card;
+  const meta = RARITY_META[result.rarity];
+  const art = FACTION_ART[card.faction] ?? FACTION_ART.通用;
   const isUnit = card.type === '士兵';
 
   return (
-    <div
-      className={`rounded-lg overflow-hidden relative ${isSmall ? 'w-16 h-22 sm:w-20 sm:h-28' : 'w-24 h-36 sm:w-28 sm:h-40'}`}
+    <button
+      type="button"
+      onClick={onClick}
+      className={`gacha-card-face group relative overflow-hidden rounded-xl text-left ${
+        featured
+          ? 'h-[380px] w-[250px] sm:h-[460px] sm:w-[302px]'
+          : compact
+            ? 'h-[108px] w-full min-w-0 sm:h-[132px]'
+            : 'h-52 w-36 sm:h-64 sm:w-44'
+      } ${onClick ? 'cursor-pointer transition hover:-translate-y-1' : 'cursor-default'}`}
       style={{
-        border: `2px solid ${result.rarity === 'rainbow' ? '#ff00ff' : result.rarity === 'gold' ? '#FFD700' : result.rarity === 'silver' ? '#C0C0C0' : '#8B7355'}`,
-        background: result.rarity === 'rainbow'
-          ? 'linear-gradient(135deg, #1a0a2e, #2d1b4e)'
-          : result.rarity === 'gold'
-          ? 'linear-gradient(135deg, #2a2008, #3a3010)'
-          : result.rarity === 'silver'
-          ? 'linear-gradient(135deg, #1e1e28, #2a2a36)'
-          : 'linear-gradient(135deg, #2a2520, #3a3530)',
+        border: `2px solid ${meta.border}`,
+        background: '#080b12',
+        boxShadow: featured ? `0 0 80px ${meta.glow}` : `0 0 24px ${meta.glow}`,
       }}
     >
-      {/* 品质光效 */}
-      {result.rarity === 'silver' && <div className="absolute inset-0 animate-silver-shine pointer-events-none z-20" />}
-      {result.rarity === 'gold' && <div className="absolute inset-0 animate-gold-burst pointer-events-none z-20" />}
-      {result.rarity === 'rainbow' && <div className="absolute inset-0 animate-rainbow-glow pointer-events-none z-20" />}
+      <img src={art} alt="" className="absolute inset-0 h-full w-full object-cover opacity-75 transition duration-500 group-hover:scale-105" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/20 to-[#06080d] from-0% via-45% to-78%" />
+      {result.rarity === 'rainbow' && <div className="gacha-rainbow-sheen absolute inset-0" />}
+      {result.rarity === 'gold' && <div className="gacha-gold-sheen absolute inset-0" />}
 
-      {/* 保底标签 */}
-      {result.isGuaranteed && (
-        <div className="absolute -top-1.5 -right-1.5 z-30 animate-guarantee-pop">
-          <div
-            className="px-1.5 py-0.5 rounded text-white font-bold"
-            style={{
-              fontSize: isSmall ? '7px' : '9px',
-              background: 'linear-gradient(135deg, #ff0000, #ff6600)',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.4)',
-            }}
-          >
-            保底
-          </div>
-        </div>
-      )}
-
-      {/* 卡牌内容 */}
-      <div className="relative z-10 flex flex-col h-full p-0.5">
-        <div className={`text-center ${isSmall ? 'text-[7px]' : 'text-[8px]'} ${colors.text} font-bold truncate leading-tight`}>
-          {card.name}
-        </div>
-        <div className="flex justify-between items-center mt-0.5 px-0.5">
-          <div
-            className={`bg-blue-900 border border-blue-500 rounded-full flex items-center justify-center text-blue-200 font-bold ${isSmall ? 'w-3 h-3 text-[6px]' : 'w-4 h-4 text-[7px]'}`}
+      <div className="relative z-10 flex h-full flex-col p-2 sm:p-3">
+        <div className="flex items-start justify-between gap-1">
+          <span
+            className={`flex items-center justify-center rounded-full border bg-black/65 font-black text-blue-100 ${
+              compact ? 'h-5 w-5 text-[9px]' : featured ? 'h-9 w-9 text-base' : 'h-7 w-7 text-xs'
+            }`}
+            style={{ borderColor: '#60a5fa88' }}
           >
             {card.cost}
-          </div>
-          <div className={`${isSmall ? 'text-[6px]' : 'text-[7px]'} ${colors.text} font-bold`}>
-            {RARITY_NAMES[result.rarity]}
-          </div>
+          </span>
+          <span
+            className={`rounded-full border bg-black/65 font-black ${compact ? 'px-1.5 py-0.5 text-[7px]' : 'px-2 py-0.5 text-[9px]'}`}
+            style={{ borderColor: `${meta.border}88`, color: meta.color }}
+          >
+            {meta.label} · {card.faction.replace('军团', '').replace('学院', '')}
+          </span>
         </div>
-        <div className="flex-1 flex flex-col items-center justify-center gap-0.5">
-          <div className={`${isSmall ? 'text-[6px]' : 'text-[7px]'} ${isUnit ? 'text-gray-400' : 'text-purple-300'}`}>
-            {isUnit ? card.subtype : '法术'}
+
+        <div className="mt-auto">
+          <div className={`font-black text-white drop-shadow-lg ${compact ? 'truncate text-[10px]' : featured ? 'text-xl' : 'text-sm'}`}>
+            {card.name}
           </div>
-          <div className={`flex gap-1 ${isSmall ? 'text-[7px]' : 'text-[8px]'}`}>
+          {!compact && (
+            <>
+              <div className={`mt-1 font-bold uppercase tracking-wider ${featured ? 'text-xs' : 'text-[9px]'}`} style={{ color: meta.color }}>
+                {card.subtype} · {card.type}
+              </div>
+              <p className={`mt-2 line-clamp-3 leading-4 text-slate-300 ${featured ? 'text-xs sm:text-sm sm:leading-5' : 'text-[9px]'}`}>
+                {card.desc}
+              </p>
+            </>
+          )}
+          <div className={`mt-2 flex items-center gap-1.5 ${compact ? 'text-[8px]' : featured ? 'text-sm' : 'text-[10px]'}`}>
             {isUnit ? (
               <>
-                <span className="text-red-400 font-bold">{card.atk}</span>
-                <span className="text-gray-600">/</span>
-                <span className="text-green-400 font-bold">{card.hp}</span>
+                <span className="rounded bg-rose-500/20 px-1.5 py-0.5 font-black text-rose-300">{card.atk} 攻</span>
+                <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 font-black text-emerald-300">{card.hp} 血</span>
+                {card.armor > 0 && <span className="rounded bg-sky-500/20 px-1.5 py-0.5 font-black text-sky-300">{card.armor} 甲</span>}
               </>
             ) : (
-              <span className="text-purple-400 font-bold">--</span>
+              <span className="rounded bg-purple-500/20 px-1.5 py-0.5 font-black text-purple-300">法术</span>
             )}
           </div>
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
-// ---- 翻转中的卡牌（卡背→正面过渡）----
-function FlippingCard({ result, size = 'normal', delay = 0 }: {
-  result: DrawResult;
-  size?: 'normal' | 'small';
-  delay?: number;
-}) {
-  const [phase, setPhase] = useState<'back' | 'flipping' | 'front'>('back');
-  const isSmall = size === 'small';
-
-  useEffect(() => {
-    const t1 = setTimeout(() => setPhase('flipping'), delay);
-    const t2 = setTimeout(() => setPhase('front'), delay + FLIP_DURATION / 2);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [delay]);
-
-  if (phase === 'back') {
-    return <CardBack size={size} disabled />;
-  }
-
+function OpeningStage({ theme, highest }: { theme: PackTheme; highest: DrawResult }) {
   return (
-    <div
-      className={isSmall ? 'w-16 h-22 sm:w-20 sm:h-28' : 'w-24 h-36 sm:w-28 sm:h-40'}
-      style={{
-        perspective: '600px',
-        transformStyle: 'preserve-3d',
-      }}
-    >
+    <div className="relative flex flex-col items-center gap-7">
       <div
-        className="w-full h-full relative"
-        style={{
-          transformStyle: 'preserve-3d',
-          animation: phase === 'flipping' ? `cardFlip ${FLIP_DURATION}ms ease-in-out forwards` : 'none',
-          transform: phase === 'front' ? 'rotateY(180deg)' : 'rotateY(0deg)',
-          transition: phase === 'front' ? 'none' : undefined,
-        }}
+        className="gacha-opening-aura absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
+        style={{ background: RARITY_META[highest.rarity].glow }}
+      />
+      <div className="relative">
+        <div className="gacha-orbit absolute -inset-12 rounded-full border border-dashed border-white/15" />
+        <PackSeal theme={theme} opened />
+      </div>
+      <div className="relative text-center">
+        <div className="text-[10px] font-black uppercase tracking-[0.3em]" style={{ color: theme.accent }}>正在解除军备封印</div>
+        <div className="mt-2 text-lg font-black text-white">{theme.label}</div>
+      </div>
+    </div>
+  );
+}
+
+function ForecastStage({ highest }: { highest: DrawResult }) {
+  const meta = RARITY_META[highest.rarity];
+  return (
+    <div className="flex flex-col items-center text-center">
+      <div
+        className={`gacha-forecast-core flex h-32 w-32 items-center justify-center rounded-full border-2 sm:h-44 sm:w-44 ${
+          highest.rarity === 'rainbow' ? 'gacha-rainbow-core' : ''
+        }`}
+        style={{ borderColor: meta.border, background: meta.soft, boxShadow: `0 0 90px ${meta.glow}` }}
       >
-        <div
-          className="absolute inset-0 rounded-lg"
-          style={{ backfaceVisibility: 'hidden' }}
-        >
-          <CardBack size={size} disabled />
-        </div>
-        <div
-          className="absolute inset-0 rounded-lg"
-          style={{
-            backfaceVisibility: 'hidden',
-            transform: 'rotateY(180deg)',
-          }}
-        >
-          {/* 父容器已处理翻转，CardFront只负责显示正面 */}
-          <CardFront result={result} size={size} />
-        </div>
+        <Sparkles className="h-12 w-12 sm:h-16 sm:w-16" style={{ color: meta.color }} />
       </div>
+      <div className="mt-8 text-[10px] font-black uppercase tracking-[0.35em] text-slate-500">封印响应</div>
+      <h2 className="mt-2 text-2xl font-black sm:text-4xl" style={{ color: meta.color }}>{meta.forecast}</h2>
+      <p className="mt-3 text-xs text-slate-400">本次征召的最高品质已被感知</p>
     </div>
   );
 }
 
-// ---- 可点击翻开的单抽卡牌 ----
-function ClickableCard({ result, onFlip, disabled }: {
-  result: DrawResult;
-  onFlip: () => void;
-  disabled: boolean;
-}) {
-  const [flipped, setFlipped] = useState(false);
-  const [flipping, setFlipping] = useState(false);
-
-  const handleClick = () => {
-    if (flipped || flipping || disabled) return;
-    setFlipping(true);
-    setTimeout(() => {
-      setFlipping(false);
-      setFlipped(true);
-      onFlip();
-    }, FLIP_DURATION);
-  };
-
-  if (!flipped && !flipping) {
-    return <CardBack size="normal" onClick={handleClick} />;
-  }
-
-  if (flipping) {
-    return (
-      <div style={{ perspective: '600px', transformStyle: 'preserve-3d' }}>
-        <div
-          className="w-24 h-36 sm:w-28 sm:h-40"
-          style={{
-            transformStyle: 'preserve-3d',
-            animation: `cardFlip ${FLIP_DURATION}ms ease-in-out forwards`,
-          }}
-        >
-          <div className="absolute inset-0" style={{ backfaceVisibility: 'hidden' }}>
-            <CardBack size="normal" disabled />
-          </div>
-          <div className="absolute inset-0" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
-            <CardFront result={result} size="normal" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return <CardFront result={result} size="normal" />;
-}
-
-// ---- 十连统计层（含结算功能）----
-function TenResultLayer({
-  results,
-  onClose,
-  onDrawAgain,
-}: {
-  results: DrawResult[];
-  onClose: () => void;
-  onDrawAgain: () => void;
-}) {
-  const [sortState, setSortState] = useState<'original' | 'sorted'>('original');
-
-  const stats = useMemo(() => ({
-    copper: results.filter(r => r.rarity === 'copper').length,
-    silver: results.filter(r => r.rarity === 'silver').length,
-    gold: results.filter(r => r.rarity === 'gold').length,
-    rainbow: results.filter(r => r.rarity === 'rainbow').length,
-  }), [results]);
-
-  // 原始顺序的卡片
-  const originalCards = useMemo(() => results, [results]);
-  // 按品质排序的卡片
-  const sortedCards = useMemo(() => sortByRarity(results), [results]);
-
-  const displayCards = sortState === 'sorted' ? sortedCards : originalCards;
-
-  const handleSort = () => {
-    if (sortState !== 'original') return;
-    setSortState('sorted');
-  };
-
-  const handleRestore = () => {
-    if (sortState !== 'sorted') return;
-    setSortState('original');
-  };
-
-  // 计算分区信息
-  const zoneInfo = useMemo(() => {
-    let idx = 0;
-    const zones: { label: string; color: string; count: number }[] = [];
-    if (stats.rainbow > 0) { zones.push({ label: '彩卡区', color: 'text-purple-400', count: stats.rainbow }); idx += stats.rainbow; }
-    if (stats.gold > 0) { zones.push({ label: '金卡区', color: 'text-yellow-400', count: stats.gold }); idx += stats.gold; }
-    if (stats.silver > 0) { zones.push({ label: '银卡区', color: 'text-slate-300', count: stats.silver }); idx += stats.silver; }
-    if (stats.copper > 0) { zones.push({ label: '铜卡区', color: 'text-amber-400', count: stats.copper }); }
-    return zones;
-  }, [stats]);
-
+function SingleReveal({ results }: { results: DrawResult[] }) {
   return (
-    <div className="flex flex-col items-center gap-4 w-full max-w-6xl px-4">
-      <h2 className="text-xl sm:text-2xl font-bold text-yellow-400">十连召唤结果</h2>
-      <div className="flex justify-center gap-6 text-sm">
-        <span className="text-purple-400 font-bold">彩:{stats.rainbow}</span>
-        <span className="text-yellow-400 font-bold">金:{stats.gold}</span>
-        <span className="text-slate-300 font-bold">银:{stats.silver}</span>
-        <span className="text-amber-400 font-bold">铜:{stats.copper}</span>
+    <div className="flex w-full max-w-5xl flex-col items-center gap-6">
+      <div className="text-center">
+        <div className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-400">逐一确认征召结果</div>
+        <h2 className="mt-2 text-xl font-black text-white sm:text-2xl">五枚军印正在响应</h2>
       </div>
-      {results.some(r => r.isGuaranteed) && (
-        <div className="text-red-400 text-xs font-bold animate-pulse">本次触发了保底机制！</div>
-      )}
-
-      {/* 卡牌网格 + 分区标签 */}
-      <div className="relative w-full flex">
-        {/* 分区标签 */}
-        {sortState === 'sorted' && (
-          <div className="flex flex-col shrink-0 w-8 mr-1">
-            {zoneInfo.map((zone, i) => (
-              <div
-                key={i}
-                className={`${zone.color} text-xs font-bold flex items-center justify-center`}
-                style={{
-                  height: `${(zone.count / displayCards.length) * 100}%`,
-                  minHeight: '30px',
-                  writingMode: 'vertical-rl',
-                  textOrientation: 'mixed',
-                }}
-              >
-                {zone.label}
-              </div>
-            ))}
+      <div className="flex flex-wrap justify-center gap-2.5 sm:gap-4">
+        {results.map((result, index) => (
+          <div key={`${result.card.id}-${index}`} className="gacha-card-arrive" style={{ animationDelay: `${index * 180}ms` }}>
+            <CardFace result={result} />
           </div>
-        )}
-
-        {/* 卡片网格 */}
-        <div className="flex-1 overflow-x-auto">
-          <div className="grid grid-cols-5 sm:grid-cols-10 gap-1 p-1">
-            {displayCards.map((result, i) => (
-              <div
-                key={`${sortState}-${i}`}
-                className="transition-all duration-300"
-                style={{
-                  transitionDelay: sortState === 'sorted'
-                    ? `${FLY_DELAYS[result.rarity]}ms`
-                    : '0ms',
-                }}
-              >
-                <CardFront result={result} size="small" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex gap-3 mt-2">
-        <button onClick={onDrawAgain} className="px-5 py-2 bg-gradient-to-r from-purple-700 to-pink-600 hover:from-purple-600 hover:to-pink-500 border border-purple-400 rounded-lg text-white font-bold cursor-pointer hover:scale-105 transition-transform text-sm">再抽十连</button>
-        {sortState === 'original' ? (
-          <button onClick={handleSort} className="px-5 py-2 bg-blue-800 hover:bg-blue-700 border border-blue-500 rounded-lg text-white font-bold cursor-pointer hover:scale-105 transition-transform text-sm">结算</button>
-        ) : (
-          <button onClick={handleRestore} className="px-5 py-2 bg-blue-800 hover:bg-blue-700 border border-blue-500 rounded-lg text-white font-bold cursor-pointer hover:scale-105 transition-transform text-sm">恢复</button>
-        )}
-        <button onClick={onClose} className="px-5 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-lg text-gray-300 cursor-pointer hover:scale-105 transition-transform text-sm">关闭</button>
-      </div>
-    </div>
-  );
-}
-
-// ---- 单抽结果统计 ----
-function SingleResultLayer({
-  results,
-  onClose,
-  onDrawAgain,
-}: {
-  results: DrawResult[];
-  onClose: () => void;
-  onDrawAgain: () => void;
-}) {
-  const stats = useMemo(() => ({
-    copper: results.filter(r => r.rarity === 'copper').length,
-    silver: results.filter(r => r.rarity === 'silver').length,
-    gold: results.filter(r => r.rarity === 'gold').length,
-    rainbow: results.filter(r => r.rarity === 'rainbow').length,
-  }), [results]);
-
-  return (
-    <div className="flex flex-col items-center gap-4 w-full max-w-2xl px-4">
-      <h2 className="text-xl sm:text-2xl font-bold text-yellow-400">召唤结果</h2>
-      <div className="flex justify-center gap-4 text-sm">
-        <span className="text-purple-400 font-bold">彩:{stats.rainbow}</span>
-        <span className="text-yellow-400 font-bold">金:{stats.gold}</span>
-        <span className="text-slate-300 font-bold">银:{stats.silver}</span>
-        <span className="text-amber-400 font-bold">铜:{stats.copper}</span>
-      </div>
-      {results.some(r => r.isGuaranteed) && (
-        <div className="text-red-400 text-xs font-bold animate-pulse">本次触发了保底机制！</div>
-      )}
-      <div className="flex gap-3">
-        {results.map((r, i) => (
-          <CardFront key={i} result={r} size="normal" />
         ))}
       </div>
-      <div className="flex gap-3 mt-2">
-        <button
-          onClick={onDrawAgain}
-          className="px-5 py-2 bg-gradient-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 border border-amber-500 rounded-lg text-white font-bold cursor-pointer hover:scale-105 transition-transform"
-        >
-          再抽一次
-        </button>
-        <button
-          onClick={onClose}
-          className="px-5 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-lg text-gray-300 cursor-pointer hover:scale-105 transition-transform"
-        >
-          关闭
-        </button>
+    </div>
+  );
+}
+
+function TenReveal({ results, theme }: { results: DrawResult[]; theme: PackTheme }) {
+  const packs = useMemo(() => groupPacks(results), [results]);
+  return (
+    <div className="flex w-full max-w-4xl flex-col items-center gap-6">
+      <div className="text-center">
+        <div className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-400">十包连续征召</div>
+        <h2 className="mt-2 text-xl font-black text-white sm:text-2xl">军备封印依次开启</h2>
+      </div>
+      <div className="grid w-full grid-cols-5 gap-2 sm:grid-cols-10 sm:gap-3">
+        {packs.map((pack, index) => {
+          const highest = getHighest(pack);
+          const meta = RARITY_META[highest.rarity];
+          const Icon = theme.icon;
+          return (
+            <div
+              key={index}
+              className="gacha-mini-pack relative flex aspect-[3/4] flex-col items-center justify-center overflow-hidden rounded-xl border bg-slate-950/90"
+              style={{
+                animationDelay: `${index * 110}ms`,
+                borderColor: meta.border,
+                boxShadow: `0 0 24px ${meta.glow}`,
+              }}
+            >
+              <div className="absolute inset-0 opacity-40" style={{ background: theme.shell }} />
+              <Icon className="relative h-5 w-5 text-white/80 sm:h-7 sm:w-7" />
+              <span className="relative mt-2 text-[9px] font-black sm:text-[10px]" style={{ color: meta.color }}>
+                {index + 1}
+              </span>
+              <span className="relative mt-0.5 text-[7px] text-white/45">最高 {meta.label}</span>
+            </div>
+          );
+        })}
+      </div>
+      <RarityPips results={results} />
+    </div>
+  );
+}
+
+function SpotlightStage({ result }: { result: DrawResult }) {
+  const meta = RARITY_META[result.rarity];
+  return (
+    <div className="relative flex flex-col items-center">
+      <div
+        className="gacha-spotlight-beam pointer-events-none absolute -top-40 h-[700px] w-[420px]"
+        style={{ background: `linear-gradient(to bottom, ${meta.glow}, transparent 72%)` }}
+      />
+      <div className="relative mb-5 text-center">
+        <div className="text-[10px] font-black uppercase tracking-[0.35em]" style={{ color: meta.color }}>
+          {result.rarity === 'rainbow' ? '虹彩传奇降临' : '金色精锐应召'}
+        </div>
+        <h2 className="mt-2 text-2xl font-black text-white sm:text-3xl">{result.card.name}</h2>
+      </div>
+      <div className="gacha-featured-arrive relative">
+        <CardFace result={result} featured />
+      </div>
+      {result.isGuaranteed && (
+        <div className="mt-4 rounded-full border border-rose-400/40 bg-rose-500/15 px-4 py-1.5 text-[10px] font-black text-rose-200">
+          本次触发保底征召
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CardDetail({ result, onClose }: { result: DrawResult; onClose: () => void }) {
+  const card = result.card;
+  return (
+    <div className="fixed inset-0 z-[100010] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md" onClick={onClose}>
+      <div className="flex max-h-[90vh] max-w-2xl flex-col gap-5 overflow-y-auto rounded-2xl border border-white/10 bg-slate-950 p-4 sm:flex-row sm:p-6" onClick={(event) => event.stopPropagation()}>
+        <div className="shrink-0 self-center">
+          <CardFace result={result} featured />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.2em]" style={{ color: RARITY_META[result.rarity].color }}>
+                {RARITY_META[result.rarity].label} · {card.faction}
+              </div>
+              <h3 className="mt-1 text-xl font-black text-white">{card.name}</h3>
+            </div>
+            <button type="button" onClick={onClose} className="rounded-lg border border-white/10 bg-white/5 p-2 text-slate-400 hover:text-white" aria-label="关闭卡牌详情">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <p className="mt-4 text-sm leading-6 text-slate-300">{card.desc}</p>
+          <div className="mt-5 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-lg border border-blue-400/20 bg-blue-400/10 p-3 text-blue-200"><b>{card.cost}</b> 费用</div>
+            <div className="rounded-lg border border-purple-400/20 bg-purple-400/10 p-3 text-purple-200">{card.subtype}</div>
+            <div className="rounded-lg border border-rose-400/20 bg-rose-400/10 p-3 text-rose-200"><b>{card.atk}</b> 攻击</div>
+            <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 p-3 text-emerald-200"><b>{card.hp}</b> 生命</div>
+          </div>
+          <div className="mt-5">
+            <div className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">技能关键词</div>
+            <div className="flex flex-wrap gap-2">
+              {getVisibleSkillLabels(card.skills, card.desc).length > 0 ? getVisibleSkillLabels(card.skills, card.desc).map(skill => (
+                <span key={skill} className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[10px] font-bold text-amber-200">{skill}</span>
+              )) : <span className="text-xs text-slate-600">无额外技能</span>}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-// ===================== 主组件 =====================
-export default function GachaAnimation({ results, drawMode, packType: _packType, onClose, onDrawAgain }: Props) {
-  void _packType; // 当前未使用，保留接口兼容性
-  const [state, setState] = useState<DrawState>('pack_opening');
-  const [flippedCount, setFlippedCount] = useState(0);
-  const [closeConfirm, setCloseConfirm] = useState(false);
-
-  const totalCards = results.length;
-  const isAllFlipped = flippedCount >= totalCards;
-
-  // 当results变化（再抽）时，重置所有状态重新开始动画
-  useEffect(() => {
-    setState('pack_opening');
-    setFlippedCount(0);
-    setCloseConfirm(false);
-  }, [results]);
-
-  // 卡包开箱动画完成后进入cards_showing
-  useEffect(() => {
-    if (state !== 'pack_opening') return;
-    const timer = setTimeout(() => {
-      setState('cards_showing');
-    }, drawMode === 'single' ? 2000 : 1000);
-    return () => clearTimeout(timer);
-  }, [state, drawMode]);
-
-  // 十连：cards_showing 后自动进入 all_opening（自动翻转）
-  useEffect(() => {
-    if (state !== 'cards_showing' || drawMode !== 'ten') return;
-    // 短暂延迟让用户看到卡背，然后开始自动翻转
-    const timer = setTimeout(() => {
-      setState('all_opening');
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [state, drawMode]);
-
-  // all_opening 完成后进入 result_showing
-  useEffect(() => {
-    if (state !== 'all_opening') return;
-    // 计算最大翻转延迟 + 翻转动画时间
-    const maxBatchDelay = Math.max(...results.map(r => BATCH_DELAYS[r.rarity]));
-    const totalTime = maxBatchDelay + FLIP_DURATION + 500;
-    const timer = setTimeout(() => {
-      setFlippedCount(totalCards);
-      setState('result_showing');
-    }, totalTime);
-    return () => clearTimeout(timer);
-  }, [state, results, totalCards]);
-
-  // 单抽：逐张翻开回调
-  const handleCardFlipped = useCallback(() => {
-    setFlippedCount(prev => {
-      const next = prev + 1;
-      if (next >= totalCards) {
-        setTimeout(() => setState('result_showing'), 300);
-      }
-      return next;
-    });
-  }, [totalCards]);
-
-  // 单抽：打开全部
-  const handleOpenAll = useCallback(() => {
-    if (state !== 'cards_showing') return;
-    setState('all_opening');
-    // 按品质分批翻转所有未翻开卡片
-    const maxDelay = 300 + FLIP_DURATION;
-    setTimeout(() => {
-      setFlippedCount(totalCards);
-      setState('result_showing');
-    }, maxDelay + 100);
-  }, [state, flippedCount, totalCards, results]);
-
-  // 关闭处理
-  const handleClose = useCallback(() => {
-    if (drawMode === 'single' && !isAllFlipped && state !== 'result_showing') {
-      setCloseConfirm(true);
-      return;
-    }
-    onClose();
-  }, [drawMode, isAllFlipped, state, onClose]);
-
-  const confirmClose = useCallback(() => {
-    setCloseConfirm(false);
-    onClose();
-  }, [onClose]);
+function ResultStage({
+  results,
+  packType,
+  drawMode,
+  onDrawAgain,
+  onClose,
+  onSelect,
+}: {
+  results: DrawResult[];
+  packType: string;
+  drawMode: 'single' | 'ten';
+  onDrawAgain: () => void;
+  onClose: () => void;
+  onSelect: (result: DrawResult) => void;
+}) {
+  const sorted = useMemo(() => [...results].sort((a, b) => {
+    const rarity = RARITY_ORDER[b.rarity] - RARITY_ORDER[a.rarity];
+    return rarity || b.card.cost - a.card.cost;
+  }), [results]);
+  const featured = sorted.slice(0, Math.min(drawMode === 'ten' ? 3 : 1, sorted.length));
 
   return (
-    <div
-      className="fixed inset-0 overflow-y-auto"
-      style={{
-        position: 'fixed',
-        top: 0, left: 0, right: 0, bottom: 0,
-        zIndex: 99999,
-        backgroundColor: 'rgba(0,0,0,0.95)',
-      }}
-    >
-      {/* 全局CSS动画 */}
+    <div className="flex w-full max-w-6xl flex-col gap-5 px-1 pb-24 pt-4 sm:px-4">
+      <div className="text-center">
+        <div className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-400">{packType} · 征召完成</div>
+        <h2 className="mt-2 text-2xl font-black text-white sm:text-3xl">本次军备已送达</h2>
+        <p className="mt-2 text-xs text-slate-500">点击任意卡牌可查看完整信息</p>
+      </div>
+
+      <RarityPips results={results} />
+
+      <section>
+        <div className="mb-2.5 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+          <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+          本次焦点
+        </div>
+        <div className={`grid gap-3 ${featured.length === 1 ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-3'}`}>
+          {featured.map((result, index) => (
+            <button
+              type="button"
+              key={`${result.card.id}-feature-${index}`}
+              onClick={() => onSelect(result)}
+              className="group flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.035] p-3 text-left transition hover:border-white/20 hover:bg-white/[0.07]"
+            >
+              <div
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border"
+                style={{ borderColor: RARITY_META[result.rarity].border, background: RARITY_META[result.rarity].soft, color: RARITY_META[result.rarity].color }}
+              >
+                {result.rarity === 'rainbow' ? <Crown className="h-5 w-5" /> : result.rarity === 'gold' ? <Sparkles className="h-5 w-5" /> : <Swords className="h-5 w-5" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-black text-white">{result.card.name}</div>
+                <div className="mt-1 text-[10px] text-slate-500">{result.card.faction} · {result.card.subtype}</div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-slate-600 transition group-hover:translate-x-0.5 group-hover:text-slate-300" />
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+            <Eye className="h-3.5 w-3.5 text-blue-400" />
+            全部结果 · 已按品质排序
+          </div>
+          <span className="text-[10px] text-slate-600">{results.length} 张</span>
+        </div>
+        <div className={`grid gap-1.5 ${drawMode === 'ten' ? 'grid-cols-5 sm:grid-cols-8 lg:grid-cols-10' : 'grid-cols-3 sm:grid-cols-5'}`}>
+          {sorted.map((result, index) => (
+            <CardFace key={`${result.card.id}-${index}`} result={result} compact onClick={() => onSelect(result)} />
+          ))}
+        </div>
+      </section>
+
+      <div className="fixed bottom-0 left-0 right-0 z-[100005] border-t border-white/10 bg-slate-950/90 px-3 py-3 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-3xl items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-10 items-center justify-center rounded-lg border border-white/10 bg-white/5 px-4 text-xs font-bold text-slate-300 transition hover:bg-white/10 hover:text-white"
+          >
+            返回卡包
+          </button>
+          <button
+            type="button"
+            onClick={onDrawAgain}
+            className="flex h-10 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-300 px-5 text-xs font-black text-slate-950 transition hover:brightness-110"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            再次{drawMode === 'ten' ? '十连征召' : '开启一包'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function GachaAnimation({ results, drawMode, packType, onClose, onDrawAgain }: Props) {
+  const [stage, setStage] = useState<Stage>('opening');
+  const [detailCard, setDetailCard] = useState<DrawResult | null>(null);
+  const theme = PACK_THEMES[packType] ?? DEFAULT_THEME;
+  const highest = useMemo(() => getHighest(results), [results]);
+  const hasSpotlight = highest.rarity === 'gold' || highest.rarity === 'rainbow';
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setStage('opening');
+      setDetailCard(null);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [results]);
+
+  useEffect(() => {
+    const timings: Partial<Record<Stage, number>> = {
+      opening: 1650,
+      forecast: 1150,
+      reveal: drawMode === 'ten' ? 2200 : 2800,
+      spotlight: 2400,
+    };
+    const delay = timings[stage];
+    if (!delay) return;
+
+    const timer = window.setTimeout(() => {
+      if (stage === 'opening') setStage('forecast');
+      else if (stage === 'forecast') setStage('reveal');
+      else if (stage === 'reveal') setStage(hasSpotlight ? 'spotlight' : 'results');
+      else if (stage === 'spotlight') setStage('results');
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [stage, drawMode, hasSpotlight]);
+
+  return (
+    <div data-gacha-animation="v2" className="fixed inset-0 z-[99999] overflow-y-auto bg-[#03050a] text-slate-100">
       <style>{`
-        @keyframes cardFlip {
-          0% { transform: rotateY(0deg) scale(1); }
-          50% { transform: rotateY(90deg) scale(1.15); }
-          100% { transform: rotateY(180deg) scale(1); }
+        @keyframes gachaPackOpen {
+          0%, 32% { transform: translateY(0) rotate(0); filter: brightness(1); }
+          44% { transform: translateY(-8px) rotate(-3deg); }
+          54% { transform: translateY(5px) rotate(3deg); filter: brightness(1.35); }
+          72% { transform: scale(1.08); filter: brightness(1.8); }
+          100% { transform: scale(1.22); filter: brightness(2.5); opacity: 0; }
         }
-        @keyframes packShake {
-          0%, 100% { transform: rotate(0deg); }
-          10% { transform: rotate(-8deg); }
-          20% { transform: rotate(8deg); }
-          30% { transform: rotate(-6deg); }
-          40% { transform: rotate(6deg); }
-          50% { transform: rotate(-4deg); }
-          60% { transform: rotate(4deg); }
-          70% { transform: rotate(-2deg); }
-          80% { transform: rotate(2deg); }
-          90% { transform: rotate(-1deg); }
-        }
-        @keyframes packBurst {
-          0% { transform: scale(1) rotate(0deg); opacity: 1; }
-          50% { transform: scale(1.1) rotate(5deg); opacity: 1; }
-          100% { transform: scale(0) rotate(20deg); opacity: 0; }
-        }
-        @keyframes silverShine {
-          0%, 100% { box-shadow: inset 0 0 5px rgba(192,192,192,0.3); }
-          50% { box-shadow: inset 0 0 15px rgba(255,255,255,0.6), 0 0 10px rgba(192,192,192,0.5); }
-        }
-        @keyframes goldBurst {
-          0% { box-shadow: 0 0 0 rgba(255,215,0,0); }
-          30% { box-shadow: 0 0 30px rgba(255,215,0,0.8), 0 0 60px rgba(255,165,0,0.4); }
-          100% { box-shadow: 0 0 10px rgba(255,215,0,0.3); }
-        }
-        @keyframes rainbowGlow {
-          0% { box-shadow: 0 0 20px rgba(255,0,0,0.6); border-color: #ff0000; }
-          20% { box-shadow: 0 0 25px rgba(255,165,0,0.6); border-color: #ffa500; }
-          40% { box-shadow: 0 0 30px rgba(255,255,0,0.6); border-color: #ffff00; }
-          60% { box-shadow: 0 0 25px rgba(0,255,0,0.6); border-color: #00ff00; }
-          80% { box-shadow: 0 0 20px rgba(0,0,255,0.6); border-color: #0000ff; }
-          100% { box-shadow: 0 0 30px rgba(128,0,128,0.6); border-color: #800080; }
-        }
-        @keyframes guaranteePop {
-          0% { transform: scale(0) rotate(-10deg); opacity: 0; }
-          60% { transform: scale(1.2) rotate(5deg); opacity: 1; }
-          100% { transform: scale(1) rotate(0deg); opacity: 1; }
-        }
-        @keyframes cardFly {
-          0% { transform: translate(var(--fly-dx, 0), var(--fly-dy, 0)) scale(1); }
-          50% { transform: translate(calc(var(--fly-dx, 0) * 0.5), calc(var(--fly-dy, 0) * 0.5)) scale(1.1); }
-          100% { transform: translate(0, 0) scale(1); }
-        }
-        @keyframes pushAway {
-          0% { transform: translate(0, 0); }
-          50% { transform: translate(var(--push-dx, 0px), var(--push-dy, 0px)); }
-          100% { transform: translate(0, 0); }
-        }
-        .animate-pack-shake { animation: packShake 1.5s ease-in-out; }
-        .animate-pack-burst { animation: packBurst 0.6s ease-out forwards; }
-        .animate-card-flip { animation: cardFlip 0.6s ease-in-out forwards; }
-        .animate-silver-shine { animation: silverShine 2s ease-in-out 1; }
-        .animate-gold-burst { animation: goldBurst 1.5s ease-out forwards; }
-        .animate-rainbow-glow { animation: rainbowGlow 2s linear infinite; }
-        .animate-guarantee-pop { animation: guaranteePop 0.5s ease-out 0.3s both; }
-        .writing-vertical {
-          writing-mode: vertical-rl;
-          text-orientation: mixed;
+        @keyframes gachaAura { 0%,100% { transform: translate(-50%,-50%) scale(.78); opacity: .35; } 50% { transform: translate(-50%,-50%) scale(1.2); opacity: .8; } }
+        @keyframes gachaOrbit { to { transform: rotate(360deg); } }
+        @keyframes gachaForecast { 0% { transform: scale(.25); opacity: 0; } 58% { transform: scale(1.14); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes gachaRainbow { 0% { filter: hue-rotate(0deg); } 100% { filter: hue-rotate(360deg); } }
+        @keyframes gachaCardArrive { 0% { transform: translateY(60px) rotateY(90deg) scale(.75); opacity: 0; } 70% { transform: translateY(-8px) rotateY(0) scale(1.04); opacity: 1; } 100% { transform: translateY(0) rotateY(0) scale(1); opacity: 1; } }
+        @keyframes gachaMiniPack { 0% { transform: translateY(-30px) scale(.72); opacity: 0; filter: brightness(2); } 70% { transform: translateY(4px) scale(1.05); opacity: 1; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+        @keyframes gachaFeatured { 0% { transform: translateY(80px) scale(.55) rotateY(90deg); opacity: 0; } 65% { transform: translateY(-10px) scale(1.08) rotateY(0); opacity: 1; } 100% { transform: translateY(0) scale(1) rotateY(0); opacity: 1; } }
+        @keyframes gachaSheen { 0% { transform: translateX(-150%) skewX(-20deg); } 100% { transform: translateX(220%) skewX(-20deg); } }
+        @keyframes gachaBeam { 0% { opacity: 0; transform: scaleX(.2); } 100% { opacity: .8; transform: scaleX(1); } }
+        .gacha-pack-opened { animation: gachaPackOpen 1.65s cubic-bezier(.2,.8,.2,1) forwards; }
+        .gacha-opening-aura { animation: gachaAura 1.2s ease-in-out infinite; }
+        .gacha-orbit { animation: gachaOrbit 7s linear infinite; }
+        .gacha-forecast-core { animation: gachaForecast .7s cubic-bezier(.2,.9,.2,1) both; }
+        .gacha-rainbow-core, .gacha-rainbow-sheen { animation: gachaRainbow 2.4s linear infinite; }
+        .gacha-card-arrive { opacity: 0; animation: gachaCardArrive .75s cubic-bezier(.2,.9,.2,1) forwards; perspective: 900px; }
+        .gacha-mini-pack { opacity: 0; animation: gachaMiniPack .6s cubic-bezier(.2,.9,.2,1) forwards; }
+        .gacha-featured-arrive { animation: gachaFeatured .9s cubic-bezier(.2,.9,.2,1) both; perspective: 1000px; }
+        .gacha-gold-sheen::after, .gacha-rainbow-sheen::after { content:''; position:absolute; inset:-20%; width:38%; background:linear-gradient(90deg,transparent,rgba(255,255,255,.42),transparent); animation:gachaSheen 2.1s ease-in-out infinite; }
+        .gacha-spotlight-beam { animation: gachaBeam .8s ease-out both; clip-path: polygon(43% 0,57% 0,100% 100%,0 100%); filter: blur(12px); }
+        @media (prefers-reduced-motion: reduce) {
+          .gacha-pack-opened, .gacha-opening-aura, .gacha-orbit, .gacha-forecast-core, .gacha-rainbow-core,
+          .gacha-card-arrive, .gacha-mini-pack, .gacha-featured-arrive, .gacha-gold-sheen::after,
+          .gacha-rainbow-sheen::after, .gacha-spotlight-beam { animation-duration: .01ms !important; animation-delay: 0ms !important; }
         }
       `}</style>
 
-      {/* 屏幕震动效果（彩卡出现时） */}
-      {(state === 'cards_showing' || state === 'flipping' || state === 'all_opening') && results.some(r => r.rarity === 'rainbow') && (
-        <div
-          className="fixed inset-0 pointer-events-none z-0"
-          style={{ animation: 'screenShake 0.3s ease-in-out' }}
-        />
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(245,158,11,.12),transparent_35%),radial-gradient(circle_at_50%_110%,rgba(37,99,235,.14),transparent_42%)]" />
+      <div className="pointer-events-none fixed inset-0 opacity-25 [background-image:linear-gradient(rgba(255,255,255,.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.025)_1px,transparent_1px)] [background-size:44px_44px]" />
+
+      {stage !== 'results' && (
+        <>
+          <button
+            type="button"
+            onClick={() => setStage('results')}
+            className="fixed right-3 top-3 z-[100005] flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-[10px] font-bold text-slate-400 backdrop-blur-md transition hover:bg-white/10 hover:text-white"
+          >
+            <SkipForward className="h-3.5 w-3.5" />
+            跳过演出
+          </button>
+          <div className="fixed left-3 top-3 z-[100005] rounded-lg border border-white/10 bg-black/35 px-3 py-2 backdrop-blur-md">
+            <div className="text-[9px] font-black uppercase tracking-[0.2em]" style={{ color: theme.accent }}>{theme.label}</div>
+            <div className="mt-0.5 text-[8px] text-slate-600">{drawMode === 'ten' ? '十连征召 · 50 张' : '开启一包 · 5 张'}</div>
+          </div>
+        </>
       )}
 
-      {/* 关闭按钮 */}
-      <button
-        onClick={handleClose}
-        className="fixed top-4 right-4 z-[100000] p-2 bg-gray-800/80 hover:bg-gray-700 border border-gray-600 rounded-lg text-gray-400 cursor-pointer transition-colors"
-      >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-      </button>
-
-      {/* 主内容区 */}
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen py-10 px-4 gap-6">
-
-        {/* ====== 单抽 ====== */}
-        {drawMode === 'single' && (
-          <>
-            {/* 步骤1：卡包开箱 */}
-            {state === 'pack_opening' && <PackOpening onDone={() => {}} />}
-
-            {/* 步骤2：5张背面 + 按钮 */}
-            {state === 'cards_showing' && (
-              <div className="flex flex-col items-center gap-6">
-                <h2 className="text-xl font-bold text-gray-200">卡牌召唤</h2>
-                <div className="flex gap-3 sm:gap-4 flex-wrap justify-center">
-                  {results.map((result, i) => (
-                    <ClickableCard
-                      key={i}
-                      result={result}
-                      onFlip={handleCardFlipped}
-                      disabled={false}
-                    />
-                  ))}
-                </div>
-                <div className="flex gap-3">
-                  <button
-                    onClick={handleOpenAll}
-                    className="px-6 py-2 bg-blue-800 hover:bg-blue-700 border border-blue-500 rounded-lg text-white font-bold cursor-pointer hover:scale-105 transition-transform text-sm"
-                  >
-                    打开全部
-                  </button>
-                  <button
-                    onClick={handleClose}
-                    className="px-6 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-lg text-gray-300 cursor-pointer hover:scale-105 transition-transform text-sm"
-                  >
-                    关闭
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* 打开全部动画中 */}
-            {state === 'all_opening' && (
-              <div className="flex flex-col items-center gap-6">
-                <h2 className="text-xl font-bold text-gray-200">正在翻开...</h2>
-                <div className="flex gap-3 sm:gap-4 flex-wrap justify-center">
-                  {results.map((result, i) => (
-                    <FlippingCard
-                      key={i}
-                      result={result}
-                      size="normal"
-                      delay={BATCH_DELAYS[result.rarity]}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 结果展示 */}
-            {state === 'result_showing' && (
-              <SingleResultLayer
-                results={results}
-                onClose={onClose}
-                onDrawAgain={onDrawAgain}
-              />
-            )}
-          </>
+      <main className={`relative z-10 mx-auto flex min-h-screen w-full items-center justify-center px-3 py-16 ${stage === 'results' ? 'items-start' : ''}`}>
+        {stage === 'opening' && <OpeningStage theme={theme} highest={highest} />}
+        {stage === 'forecast' && <ForecastStage highest={highest} />}
+        {stage === 'reveal' && (drawMode === 'single' ? <SingleReveal results={results} /> : <TenReveal results={results} theme={theme} />)}
+        {stage === 'spotlight' && <SpotlightStage result={highest} />}
+        {stage === 'results' && (
+          <ResultStage
+            results={results}
+            packType={packType}
+            drawMode={drawMode}
+            onDrawAgain={onDrawAgain}
+            onClose={onClose}
+            onSelect={setDetailCard}
+          />
         )}
+      </main>
 
-        {/* ====== 十连 ====== */}
-        {drawMode === 'ten' && (
-          <>
-            {/* 步骤1：卡包堆叠 */}
-            {state === 'pack_opening' && <PackStack onDone={() => {}} />}
+      {detailCard && <CardDetail result={detailCard} onClose={() => setDetailCard(null)} />}
 
-            {/* 步骤2：50张网格 + 自动翻转 */}
-            {(state === 'cards_showing' || state === 'all_opening') && (
-              <div className="flex flex-col items-center gap-4">
-                <h2 className="text-xl font-bold text-gray-200">十连召唤</h2>
-                <div
-                  className="grid gap-1"
-                  style={{
-                    gridTemplateColumns: `repeat(${Math.min(COLS, 10)}, 1fr)`,
-                    maxWidth: '1000px',
-                  }}
-                >
-                  {results.map((result, i) => (
-                    <FlippingCard
-                      key={i}
-                      result={result}
-                      size="small"
-                      delay={BATCH_DELAYS[result.rarity]}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 步骤3：结果统计层（含结算功能） */}
-            {(state === 'result_showing' || state === 'sorted' || state === 'sorting' || state === 'restoring') && (
-              <TenResultLayer
-                results={results}
-                onClose={onClose}
-                onDrawAgain={onDrawAgain}
-              />
-            )}
-          </>
-        )}
-      </div>
-
-      {/* 关闭确认弹窗 */}
-      {closeConfirm && (
-        <div
-          className="fixed inset-0 z-[100001] flex items-center justify-center"
-          style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
-        >
-          <div className="bg-gray-900 border border-gray-600 rounded-xl p-6 max-w-sm mx-4 text-center">
-            <p className="text-white mb-4">还有未翻开的卡牌，确定要关闭吗？</p>
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={() => setCloseConfirm(false)}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 border border-gray-500 rounded-lg text-gray-300 cursor-pointer"
-              >
-                取消
-              </button>
-              <button
-                onClick={confirmClose}
-                className="px-4 py-2 bg-red-800 hover:bg-red-700 border border-red-600 rounded-lg text-white cursor-pointer"
-              >
-                确定关闭
-              </button>
-            </div>
-          </div>
+      {stage === 'spotlight' && (
+        <div className="pointer-events-none fixed inset-0 z-[1]">
+          <Zap className="absolute left-[12%] top-[22%] h-6 w-6 text-amber-300/25" />
+          <Sparkles className="absolute right-[15%] top-[30%] h-8 w-8 text-purple-300/30" />
+          <Crown className="absolute bottom-[20%] left-[18%] h-7 w-7 text-yellow-300/20" />
         </div>
       )}
     </div>

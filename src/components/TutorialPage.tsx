@@ -1,333 +1,552 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
-  BookOpen, X, ChevronRight, ChevronLeft,
-  Swords, Move, Zap, Sparkles, Coins, Heart, ArrowLeft, ZoomIn,
+  ArrowLeft,
+  BookOpen,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Coins,
+  Crosshair,
+  Eye,
+  Flag,
+  Hand,
+  Heart,
+  Lightbulb,
+  Map,
+  MousePointerClick,
+  Move,
+  Play,
+  Shield,
+  Sparkles,
+  Swords,
+  Target,
+  X,
+  Zap,
 } from 'lucide-react';
-import ImageLightbox from './ImageLightbox';
-
-interface TutorialPageData {
-  title: string;
-  icon: React.ReactNode;
-  image: string;
-  imageCaption: string;
-  content: React.ReactNode;
-}
-
-const TUTORIAL_PAGES: TutorialPageData[] = [
-  {
-    title: '欢迎来到将领：征服',
-    icon: <Swords className="w-5 h-5 text-yellow-500" />,
-    image: '/tutorial/tut_01_battlefield.jpg',
-    imageCaption: '战场布局：双方各4行×3列，中间是HQ',
-    content: (
-      <div className="space-y-3">
-        <p className="text-sm text-gray-300">
-          这是一款基于<b className="text-yellow-400">精确距离体系</b>的1v1策略卡牌对战游戏。
-          你需要部署士兵、释放法术，最终摧毁敌方总部！
-        </p>
-        <div className="bg-gray-800/50 rounded-lg p-3 space-y-2 border border-gray-700/30">
-          <p className="text-xs text-gray-300">
-            <span className="text-yellow-400 font-bold">游戏目标</span>：将敌方总部HP从40打到0
-          </p>
-          <p className="text-xs text-gray-300">
-            <span className="text-blue-400 font-bold">你的区域</span>：底线（3格，中间是HQ）+ 前线（3格）
-          </p>
-          <p className="text-xs text-gray-300">
-            <span className="text-red-400 font-bold">敌方区域</span>：同样的布局，与你相对
-          </p>
-        </div>
-        <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-2.5">
-          <p className="text-[11px] text-blue-300">
-            <b>💡 提示</b>：将士兵拖到己方底线或前线来部署。不同兵种有不同的攻击距离！
-          </p>
-        </div>
-      </div>
-    ),
-  },
-  {
-    title: '距离计算（核心机制）',
-    icon: <Move className="w-5 h-5 text-blue-400" />,
-    image: '/tutorial/tut_02_distance.jpg',
-    imageCaption: '五种攻击距离：近战=1 / 弓箭=2 / 狙击≥2 / 魔法=不限 / 随机=不限',
-    content: (
-      <div className="space-y-3">
-        <p className="text-sm text-gray-300">
-          距离是攻击能否命中的<b className="text-yellow-400">唯一标准</b>。每种兵种有固定射程：
-        </p>
-        <div className="space-y-1.5 text-xs">
-          <div className="flex items-center gap-2 bg-red-900/20 border border-red-800/30 rounded-lg p-2">
-            <span className="w-14 text-center font-bold text-red-400 shrink-0">近战</span>
-            <span className="text-gray-300">只能打<b className="text-yellow-400">距离1</b>的目标（相邻行）</span>
-          </div>
-          <div className="flex items-center gap-2 bg-orange-900/20 border border-orange-800/30 rounded-lg p-2">
-            <span className="w-14 text-center font-bold text-orange-400 shrink-0">弓箭</span>
-            <span className="text-gray-300">只能打<b className="text-yellow-400">距离2</b>的目标（隔一行）</span>
-          </div>
-          <div className="flex items-center gap-2 bg-purple-900/20 border border-purple-800/30 rounded-lg p-2">
-            <span className="w-14 text-center font-bold text-purple-400 shrink-0">狙击</span>
-            <span className="text-gray-300">打距离≥2的目标，但<b className="text-red-400">距离1是盲区</b>！</span>
-          </div>
-          <div className="flex items-center gap-2 bg-cyan-900/20 border border-cyan-800/30 rounded-lg p-2">
-            <span className="w-14 text-center font-bold text-cyan-400 shrink-0">魔法</span>
-            <span className="text-gray-300"><b className="text-yellow-400">不限距离</b>，想打哪打哪</span>
-          </div>
-          <div className="flex items-center gap-2 bg-yellow-900/20 border border-yellow-800/30 rounded-lg p-2">
-            <span className="w-14 text-center font-bold text-yellow-400 shrink-0">随机</span>
-            <span className="text-gray-300"><b className="text-yellow-400">不限距离</b>，完全随机选择目标，伤害随机（<b className="text-yellow-400">强运</b>可让伤害取最大值）</span>
-          </div>
-        </div>
-        <div className="bg-yellow-900/20 border border-yellow-700/30 rounded-lg p-2.5">
-          <p className="text-[11px] text-yellow-400">
-            💡 <b>前线不存在规则</b>：如果一条前线没有任何单位，该前线在距离计算中被<b>跳过</b>。这意味着空前线会让双方距离缩短！
-          </p>
-        </div>
-      </div>
-    ),
-  },
-  {
-    title: '攻击概念',
-    icon: <Zap className="w-5 h-5 text-orange-400" />,
-    image: '/tutorial/tut_03_attack.jpg',
-    imageCaption: '攻击顺序：前线左→前线中→前线右→底线左→底线中→底线右',
-    content: (
-      <div className="space-y-3">
-        <p className="text-sm text-gray-300">
-          所有单位部署后<b className="text-green-400">本回合即可攻击</b>，按固定顺序依次出手：
-        </p>
-        <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700/30">
-          <p className="text-xs text-gray-300 font-mono mb-1.5">
-            <span className="text-red-400">前线左</span> → <span className="text-red-400">前线中</span> → <span className="text-red-400">前线右</span> → <span className="text-orange-400">底线左</span> → <span className="text-orange-400">底线中</span> → <span className="text-orange-400">底线右</span>
-          </p>
-          <p className="text-[10px] text-gray-400">每个单位攻击间隔1秒，可清楚看到攻击过程</p>
-        </div>
-        <div className="bg-gray-800/50 rounded-lg p-3 space-y-1.5 text-xs text-gray-300 border border-gray-700/30">
-          <p><b className="text-blue-400">嘲讽优先</b>：有嘲讽技能的单位会被优先集火</p>
-          <p><b className="text-white">距离优先</b>：无嘲讽时攻击最近的目标</p>
-          <p><b className="text-purple-400">狙击特殊</b>：多个狙击共享一个手动指定的目标</p>
-        </div>
-        <div className="bg-gray-800/50 rounded-lg p-3 space-y-1.5 border border-gray-700/30">
-          <p className="text-xs font-bold text-orange-400">三种伤害类型</p>
-          <div className="grid grid-cols-3 gap-2 text-[10px]">
-            <div className="bg-red-900/30 border border-red-700/40 rounded p-1.5 text-center">
-              <div className="text-red-400 font-bold">物理</div>
-              <div className="text-gray-400">先扣护甲</div>
-            </div>
-            <div className="bg-purple-900/30 border border-purple-700/40 rounded p-1.5 text-center">
-              <div className="text-purple-400 font-bold">魔法</div>
-              <div className="text-gray-400">无视护甲</div>
-            </div>
-            <div className="bg-gray-700/40 border border-gray-500/40 rounded p-1.5 text-center">
-              <div className="text-white font-bold">真实</div>
-              <div className="text-gray-400">无视一切</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    ),
-  },
-  {
-    title: '常见技能一览',
-    icon: <Sparkles className="w-5 h-5 text-cyan-400" />,
-    image: '/tutorial/tut_04_skills.jpg',
-    imageCaption: '掌握技能效果是制胜关键',
-    content: (
-      <div className="space-y-3">
-        <p className="text-sm text-gray-300">
-          每张卡牌可能携带1-3个技能，合理搭配技能才能发挥最大战力：
-        </p>
-        <div className="grid grid-cols-2 gap-2 text-[11px]">
-          <div className="bg-red-900/20 border border-red-800/30 rounded-lg p-2">
-            <b className="text-red-400">闪击</b> <span className="text-gray-400">部署时立即攻击一次</span>
-          </div>
-          <div className="bg-blue-900/20 border border-blue-800/30 rounded-lg p-2">
-            <b className="text-blue-400">嘲讽</b> <span className="text-gray-400">敌方优先攻击你</span>
-          </div>
-          <div className="bg-yellow-900/20 border border-yellow-800/30 rounded-lg p-2">
-            <b className="text-yellow-400">贯穿</b> <span className="text-gray-400">护甲破碎不抵挡溢出</span>
-          </div>
-          <div className="bg-green-900/20 border border-green-800/30 rounded-lg p-2">
-            <b className="text-green-400">闪避</b> <span className="text-gray-400">50%免疫物理攻击</span>
-          </div>
-          <div className="bg-purple-900/20 border border-purple-800/30 rounded-lg p-2">
-            <b className="text-purple-400">伏击</b> <span className="text-gray-400">受击前反击攻击者</span>
-          </div>
-          <div className="bg-cyan-900/20 border border-cyan-800/30 rounded-lg p-2">
-            <b className="text-cyan-400">反击</b> <span className="text-gray-400">被近战命中时反击</span>
-          </div>
-          <div className="bg-orange-900/20 border border-orange-800/30 rounded-lg p-2">
-            <b className="text-orange-400">流血</b> <span className="text-gray-400">每回合持续扣血</span>
-          </div>
-          <div className="bg-emerald-900/20 border border-emerald-800/30 rounded-lg p-2">
-            <b className="text-emerald-400">中毒</b> <span className="text-gray-400">光环技能失效</span>
-          </div>
-        </div>
-        <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-2.5">
-          <p className="text-[10px] text-gray-400">
-            游戏中点击右上角 📖 规则面板可查看完整技能词典，包含所有技能的详细说明
-          </p>
-        </div>
-      </div>
-    ),
-  },
-  {
-    title: '回合流程与资源',
-    icon: <Coins className="w-5 h-5 text-yellow-500" />,
-    image: '/tutorial/tut_05_turn.jpg',
-    imageCaption: '四个阶段循环：资源→部署→攻击→结束',
-    content: (
-      <div className="space-y-3">
-        <p className="text-sm text-gray-300">
-          每回合固定经历四个阶段，理解流程是制定策略的基础：
-        </p>
-        <div className="space-y-1.5 text-xs">
-          <div className="flex items-start gap-2 bg-yellow-900/20 border border-yellow-700/30 rounded-lg p-2">
-            <span className="text-yellow-400 font-bold shrink-0">① 资源</span>
-            <span className="text-gray-300">获得金币 + 抽1张牌 + 结算利息/DOT伤害</span>
-          </div>
-          <div className="flex items-start gap-2 bg-green-900/20 border border-green-700/30 rounded-lg p-2">
-            <span className="text-green-400 font-bold shrink-0">② 部署</span>
-            <span className="text-gray-300">消耗金币放置士兵到战场，或释放法术</span>
-          </div>
-          <div className="flex items-start gap-2 bg-red-900/20 border border-red-700/30 rounded-lg p-2">
-            <span className="text-red-400 font-bold shrink-0">③ 攻击</span>
-            <span className="text-gray-300">所有单位按顺序自动攻击敌方目标</span>
-          </div>
-          <div className="flex items-start gap-2 bg-gray-800/50 border border-gray-600/30 rounded-lg p-2">
-            <span className="text-gray-400 font-bold shrink-0">④ 结束</span>
-            <span className="text-gray-300">切换回合，轮到对手行动</span>
-          </div>
-        </div>
-        <div className="bg-yellow-900/20 border border-yellow-700/30 rounded-lg p-2.5">
-          <p className="text-[11px] text-yellow-400">
-            💡 <b>金币增长曲线</b>：第1-2回合3金 → 3-4回合4金 → 5-6回合5金 → 逐渐增至8金上限。后期可以部署更强力的单位！
-          </p>
-        </div>
-        <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-2.5">
-          <p className="text-[11px] text-blue-400">
-            🎯 <b>胜负条件</b>：将敌方总部HP降至0即获胜；己方总部HP归零则失败
-          </p>
-        </div>
-      </div>
-    ),
-  },
-];
 
 interface TutorialPageProps {
   onClose: () => void;
   onBack?: () => void;
 }
 
-export default function TutorialPage({ onClose, onBack }: TutorialPageProps) {
-  const [page, setPage] = useState(0);
-  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
-  const current = TUTORIAL_PAGES[page];
+interface Chapter {
+  title: string;
+  shortTitle: string;
+  kicker: string;
+  icon: ReactNode;
+  content: ReactNode;
+}
+
+function InfoCard({
+  icon,
+  title,
+  children,
+  tone = 'slate',
+}: {
+  icon: ReactNode;
+  title: string;
+  children: ReactNode;
+  tone?: 'slate' | 'amber' | 'blue' | 'emerald' | 'rose' | 'purple';
+}) {
+  const tones = {
+    slate: 'border-slate-700/70 bg-slate-900/65',
+    amber: 'border-amber-500/25 bg-amber-500/10',
+    blue: 'border-blue-500/25 bg-blue-500/10',
+    emerald: 'border-emerald-500/25 bg-emerald-500/10',
+    rose: 'border-rose-500/25 bg-rose-500/10',
+    purple: 'border-purple-500/25 bg-purple-500/10',
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#0a0a12]">
-      {/* 图片放大灯箱（支持滚轮缩放/双指缩放/拖拽） */}
-      {lightboxImage && (
-        <ImageLightbox
-          src={lightboxImage}
-          caption={current.imageCaption}
-          onClose={() => setLightboxImage(null)}
-        />
-      )}
-      {/* 顶部导航栏 */}
-      <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 bg-gray-800/50 border-b border-gray-700 shrink-0">
-        <div className="flex items-center gap-2">
-          {onBack && (
-            <button
-              onClick={onBack}
-              className="flex items-center gap-1 px-2 py-1 rounded text-xs font-bold text-gray-300 hover:bg-gray-700 transition-colors cursor-pointer"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" /> 返回
-            </button>
-          )}
-          <BookOpen className="w-4 h-4 text-yellow-500" />
-          <span className="text-sm font-bold text-gray-200">新手教程</span>
-          <span className="text-[10px] text-gray-500">({page + 1}/{TUTORIAL_PAGES.length})</span>
-        </div>
-        <button onClick={onClose} className="p-1 hover:bg-gray-700 rounded transition-colors cursor-pointer">
-          <X className="w-4 h-4 text-gray-400" />
-        </button>
+    <div className={`rounded-xl border p-3.5 sm:p-4 ${tones[tone]}`}>
+      <div className="mb-2 flex items-center gap-2 text-sm font-bold text-white">
+        {icon}
+        {title}
       </div>
+      <div className="text-xs leading-5 text-slate-300 sm:text-sm sm:leading-6">{children}</div>
+    </div>
+  );
+}
 
-      {/* 内容区 */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-lg mx-auto px-3 sm:px-4 py-4">
-          {/* 标题 */}
-          <div className="flex items-center gap-2 mb-3">
-            {current.icon}
-            <h3 className="text-sm sm:text-base font-bold text-white">{current.title}</h3>
-          </div>
+function BattlefieldDiagram() {
+  const rows = [
+    { label: '敌方底线', side: 'enemy', cells: ['远程位', '敌方 HQ', '远程位'] },
+    { label: '敌方前线', side: 'enemy', cells: ['单位位', '单位位', '单位位'] },
+    { label: '我方前线', side: 'player', cells: ['单位位', '单位位', '单位位'] },
+    { label: '我方底线', side: 'player', cells: ['远程位', '我方 HQ', '远程位'] },
+  ];
 
-          {/* 配图 - 点击放大 */}
-          <div
-            className={`mb-4 rounded-xl overflow-hidden border border-gray-700/50 shadow-lg shadow-black/40 cursor-zoom-in group relative ${lightboxImage ? 'bg-black' : ''}`}
-            onClick={() => !lightboxImage && setLightboxImage(current.image)}
-          >
-            <img
-              src={current.image}
-              alt={current.imageCaption}
-              className={`w-full object-cover transition-all duration-300 group-hover:scale-[1.02] ${lightboxImage ? 'opacity-0' : 'opacity-100'}`}
-              loading="lazy"
-            />
-            {/* 灯箱打开时显示黑色占位 */}
-            {lightboxImage && (
-              <div className="absolute inset-0 bg-black flex items-center justify-center">
-                <span className="text-gray-600 text-xs">图片已放大查看中</span>
-              </div>
-            )}
-            {/* 放大提示图标 */}
-            <div className={`absolute top-2 right-2 p-1.5 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity ${lightboxImage ? 'hidden' : ''}`}>
-              <ZoomIn className="w-4 h-4 text-white" />
-            </div>
-            <div className={`bg-gray-900/80 px-3 py-1.5 text-center flex items-center justify-center gap-1 ${lightboxImage ? 'opacity-50' : ''}`}>
-              <ZoomIn className="w-3 h-3 text-gray-500" />
-              <span className="text-[10px] text-gray-400 italic">{current.imageCaption}（点击放大）</span>
+  return (
+    <div className="rounded-2xl border border-slate-700/70 bg-slate-950/80 p-3 shadow-2xl shadow-black/30 sm:p-5">
+      <div className="mb-3 flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+        <span>敌方阵地</span>
+        <span className="text-amber-400">精确距离战场</span>
+        <span>我方阵地</span>
+      </div>
+      <div className="space-y-1.5">
+        {rows.map((row, rowIndex) => (
+          <div key={row.label} className="grid grid-cols-[58px_1fr] items-center gap-2 sm:grid-cols-[72px_1fr]">
+            <span className={`text-[10px] font-bold sm:text-xs ${row.side === 'enemy' ? 'text-rose-300' : 'text-blue-300'}`}>
+              {row.label}
+            </span>
+            <div className={`grid grid-cols-3 gap-1.5 rounded-xl border p-1.5 ${
+              row.side === 'enemy'
+                ? 'border-rose-500/20 bg-rose-950/35'
+                : 'border-blue-500/20 bg-blue-950/35'
+            } ${rowIndex === 1 ? 'mb-3' : ''}`}>
+              {row.cells.map((cell, cellIndex) => {
+                const isHq = cell.includes('HQ');
+                return (
+                  <div
+                    key={`${row.label}-${cellIndex}`}
+                    className={`flex min-h-12 items-center justify-center rounded-lg border text-center text-[10px] font-bold sm:min-h-16 sm:text-xs ${
+                      isHq
+                        ? 'border-amber-400/60 bg-amber-400/15 text-amber-200 shadow-[0_0_18px_rgba(251,191,36,0.12)]'
+                        : row.side === 'enemy'
+                          ? 'border-rose-400/20 bg-rose-400/5 text-rose-200/70'
+                          : 'border-blue-400/20 bg-blue-400/5 text-blue-200/70'
+                    }`}
+                  >
+                    {isHq ? <><Flag className="mr-1 h-3.5 w-3.5" />{cell}</> : cell}
+                  </div>
+                );
+              })}
             </div>
           </div>
+        ))}
+      </div>
+      <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-400/20 bg-amber-400/10 p-2.5 text-[11px] leading-5 text-amber-100/80 sm:text-xs">
+        <Move className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+        某一整条前线没有单位时，这条前线会在距离计算中被跳过，双方会瞬间靠近。
+      </div>
+    </div>
+  );
+}
 
-          {/* 文字内容 */}
-          {current.content}
+function FirstTurnGuide() {
+  const steps = [
+    {
+      number: '01',
+      icon: <Hand className="h-5 w-5" />,
+      title: '观察手牌与金币',
+      text: '开局进入部署阶段时有 5 张手牌和 3 金币。优先选择费用不超过当前金币的士兵。',
+      tone: 'text-amber-300 border-amber-400/25 bg-amber-400/10',
+    },
+    {
+      number: '02',
+      icon: <MousePointerClick className="h-5 w-5" />,
+      title: '点击部署，不用拖动',
+      text: '先点击一张士兵牌，再点击亮起的蓝色己方格位。法术牌选中后按牌面提示选择目标。',
+      tone: 'text-blue-300 border-blue-400/25 bg-blue-400/10',
+    },
+    {
+      number: '03',
+      icon: <Play className="h-5 w-5" />,
+      title: '结束回合，自动攻击',
+      text: '确认阵型后点击“结束回合”。单位会按固定顺序出手；若有狙击单位，还需统一指定目标。',
+      tone: 'text-emerald-300 border-emerald-400/25 bg-emerald-400/10',
+    },
+  ];
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-3">
+      {steps.map((step) => (
+        <div key={step.number} className={`relative overflow-hidden rounded-2xl border p-4 ${step.tone}`}>
+          <span className="absolute right-3 top-1 text-4xl font-black text-white/5">{step.number}</span>
+          <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-black/20">{step.icon}</div>
+          <h4 className="mb-1.5 text-sm font-black text-white">{step.title}</h4>
+          <p className="text-xs leading-5 text-slate-300">{step.text}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RangeGuide() {
+  const ranges = [
+    { name: '近战', range: '= 1', note: '只打相邻行', color: 'border-rose-500/30 bg-rose-500/10 text-rose-300' },
+    { name: '弓箭', range: '= 2', note: '只打隔一行', color: 'border-orange-500/30 bg-orange-500/10 text-orange-300' },
+    { name: '狙击', range: '≥ 2', note: '距离 1 是盲区', color: 'border-purple-500/30 bg-purple-500/10 text-purple-300' },
+    { name: '魔法', range: '不限', note: '优先最近目标', color: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300' },
+    { name: '随机', range: '不限', note: '随机选择目标', color: 'border-yellow-500/30 bg-yellow-500/10 text-yellow-300' },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+      {ranges.map((item) => (
+        <div key={item.name} className={`rounded-xl border p-3 text-center ${item.color}`}>
+          <div className="mb-2 text-xs font-black">{item.name}</div>
+          <div className="mb-1 text-xl font-black text-white sm:text-2xl">{item.range}</div>
+          <div className="text-[10px] leading-4 text-slate-400">{item.note}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DistanceExample() {
+  return (
+    <div className="rounded-2xl border border-slate-700/70 bg-slate-950/80 p-4">
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <div className="text-xs font-black text-white">距离示例</div>
+          <div className="mt-1 text-[10px] text-slate-500">从我方前线单位向敌方计算</div>
+        </div>
+        <span className="rounded-full border border-blue-400/30 bg-blue-400/10 px-2.5 py-1 text-[10px] font-bold text-blue-300">前线存在</span>
+      </div>
+      <div className="flex items-center gap-1.5 text-center text-[10px] sm:gap-3 sm:text-xs">
+        <div className="flex h-14 flex-1 items-center justify-center rounded-lg border border-blue-400/40 bg-blue-400/15 font-bold text-blue-200">我方单位</div>
+        <ChevronRight className="h-4 w-4 shrink-0 text-amber-400" />
+        <div className="flex h-14 flex-1 flex-col items-center justify-center rounded-lg border border-rose-400/25 bg-rose-400/5 text-rose-200/80">
+          <b className="text-amber-300">距离 1</b>敌方前线
+        </div>
+        <ChevronRight className="h-4 w-4 shrink-0 text-amber-400" />
+        <div className="flex h-14 flex-1 flex-col items-center justify-center rounded-lg border border-rose-400/25 bg-rose-400/5 text-rose-200/80">
+          <b className="text-amber-300">距离 2</b>敌方底线 / HQ
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* 底部导航 */}
-      <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 bg-gray-800/30 border-t border-gray-700 shrink-0">
-        <button
-          onClick={() => setPage(Math.max(0, page - 1))}
-          disabled={page === 0}
-          className={`flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded text-xs font-bold transition-colors cursor-pointer
-            ${page === 0 ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 hover:bg-gray-700'}`}
-        >
-          <ChevronLeft className="w-3.5 h-3.5" /> 上一页
-        </button>
-        <div className="flex gap-1.5">
-          {TUTORIAL_PAGES.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setPage(i)}
-              className={`w-2 h-2 rounded-full transition-colors cursor-pointer ${i === page ? 'bg-yellow-500' : 'bg-gray-600 hover:bg-gray-500'}`}
-            />
+function CombatGuide() {
+  const order = ['前左', '前中', '前右', '后左', '后中', '后右'];
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-700/70 bg-slate-950/80 p-4">
+        <div className="mb-3 flex items-center gap-2 text-xs font-black text-white">
+          <Zap className="h-4 w-4 text-amber-400" />
+          固定攻击顺序
+        </div>
+        <div className="grid grid-cols-6 gap-1.5">
+          {order.map((label, index) => (
+            <div key={label} className={`rounded-lg border px-1 py-2.5 text-center ${
+              index < 3 ? 'border-rose-400/25 bg-rose-400/10' : 'border-orange-400/25 bg-orange-400/10'
+            }`}>
+              <div className="mb-1 text-[10px] font-black text-amber-300">{index + 1}</div>
+              <div className="text-[10px] font-bold text-white sm:text-xs">{label}</div>
+            </div>
           ))}
         </div>
-        {page < TUTORIAL_PAGES.length - 1 ? (
-          <button
-            onClick={() => setPage(page + 1)}
-            className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded text-xs font-bold text-gray-900 bg-yellow-500 hover:bg-yellow-400 transition-colors cursor-pointer"
-          >
-            下一页 <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        ) : (
-          <button
-            onClick={onClose}
-            className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded text-xs font-bold text-gray-900 bg-green-500 hover:bg-green-400 transition-colors cursor-pointer"
-          >
-            <Heart className="w-3.5 h-3.5" /> 开始战斗
-          </button>
-        )}
+        <p className="mt-3 text-[11px] leading-5 text-slate-400">
+          部署后的士兵本回合即可攻击。射程内有嘲讽单位时优先攻击嘲讽，否则通常优先最近且正前方的目标。
+        </p>
       </div>
+      <div className="grid gap-2.5 sm:grid-cols-3">
+        <InfoCard icon={<Shield className="h-4 w-4 text-rose-300" />} title="物理伤害" tone="rose">
+          先扣护甲。普通攻击击碎护甲时，溢出伤害不会继续扣生命。
+        </InfoCard>
+        <InfoCard icon={<Sparkles className="h-4 w-4 text-purple-300" />} title="魔法伤害" tone="purple">
+          无视护甲，直接扣除生命值，适合处理重甲单位。
+        </InfoCard>
+        <InfoCard icon={<Crosshair className="h-4 w-4 text-slate-200" />} title="狙击选择" tone="slate">
+          结束回合后，为本回合所有狙击单位指定一个共同目标。
+        </InfoCard>
+      </div>
+    </div>
+  );
+}
+
+function SkillGuide() {
+  const skills = [
+    { name: '嘲讽', desc: '射程内优先攻击它，用于保护关键单位。', color: 'text-blue-300', icon: <Shield className="h-4 w-4" /> },
+    { name: '闪击', desc: '部署时立刻额外攻击一次，适合抢节奏。', color: 'text-rose-300', icon: <Zap className="h-4 w-4" /> },
+    { name: '护甲', desc: '抵挡物理伤害，被击碎时通常可挡住溢出。', color: 'text-amber-300', icon: <Shield className="h-4 w-4" /> },
+    { name: '流血', desc: '在回合开始阶段持续结算伤害。', color: 'text-orange-300', icon: <Heart className="h-4 w-4" /> },
+    { name: '隐蔽', desc: '保护底线单位，HQ 不受隐蔽保护。', color: 'text-emerald-300', icon: <Eye className="h-4 w-4" /> },
+    { name: '沉默', desc: '暂时关闭单位技能，属性与基础攻击仍保留。', color: 'text-purple-300', icon: <X className="h-4 w-4" /> },
+  ];
+
+  return (
+    <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+      {skills.map((skill) => (
+        <div key={skill.name} className="rounded-xl border border-slate-700/70 bg-slate-900/65 p-3.5">
+          <div className={`mb-1.5 flex items-center gap-2 text-sm font-black ${skill.color}`}>
+            {skill.icon}
+            {skill.name}
+          </div>
+          <p className="text-xs leading-5 text-slate-400">{skill.desc}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TurnGuide() {
+  const phases = [
+    { number: '1', title: '资源', desc: '获得金币、抽牌并结算回合开始效果', color: 'border-amber-400/30 bg-amber-400/10 text-amber-300' },
+    { number: '2', title: '部署', desc: '打出士兵或法术，调整阵型', color: 'border-blue-400/30 bg-blue-400/10 text-blue-300' },
+    { number: '3', title: '攻击', desc: '点击结束回合后，单位依次自动出手', color: 'border-rose-400/30 bg-rose-400/10 text-rose-300' },
+    { number: '4', title: '换边', desc: '对手部署与攻击，然后开始下一回合', color: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-2 sm:grid-cols-4">
+        {phases.map((phase) => (
+          <div key={phase.number} className={`rounded-xl border p-3 ${phase.color}`}>
+            <div className="mb-2 flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/25 text-xs font-black">{phase.number}</span>
+              <b className="text-sm text-white">{phase.title}</b>
+            </div>
+            <p className="text-[11px] leading-5 text-slate-400">{phase.desc}</p>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4">
+        <div className="mb-3 flex items-center gap-2 text-xs font-black text-amber-200">
+          <Coins className="h-4 w-4 text-amber-400" />
+          每回合基础金币
+        </div>
+        <div className="grid grid-cols-6 gap-1.5 text-center">
+          {[
+            ['1–2', '3'],
+            ['3–4', '4'],
+            ['5–6', '5'],
+            ['7–8', '6'],
+            ['9–10', '7'],
+            ['11+', '8'],
+          ].map(([turn, gold]) => (
+            <div key={turn} className="rounded-lg border border-amber-400/15 bg-black/15 px-1 py-2">
+              <div className="text-[9px] text-amber-200/60">回合 {turn}</div>
+              <div className="mt-1 text-base font-black text-amber-300">{gold}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const CHAPTERS: Chapter[] = [
+  {
+    title: '先记住唯一目标',
+    shortTitle: '战场目标',
+    kicker: '01 · 战场与胜负',
+    icon: <Map className="h-5 w-5" />,
+    content: (
+      <div className="space-y-4">
+        <BattlefieldDiagram />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <InfoCard icon={<Target className="h-4 w-4 text-amber-400" />} title="如何获胜" tone="amber">
+            将敌方 HQ 的 <b className="text-white">40 点生命</b>降至 0。单位只是通往 HQ 的防线，不必消灭所有敌军。
+          </InfoCard>
+          <InfoCard icon={<Shield className="h-4 w-4 text-blue-300" />} title="如何布阵" tone="blue">
+            前线更早接敌，适合保护队友；底线更安全，适合远程、辅助和需要成长的单位。
+          </InfoCard>
+        </div>
+      </div>
+    ),
+  },
+  {
+    title: '第一回合，照着这三步做',
+    shortTitle: '首次部署',
+    kicker: '02 · 实际操作',
+    icon: <MousePointerClick className="h-5 w-5" />,
+    content: (
+      <div className="space-y-4">
+        <FirstTurnGuide />
+        <InfoCard icon={<Lightbulb className="h-4 w-4 text-amber-400" />} title="第一次部署建议" tone="amber">
+          没有明确思路时，先把耐打或带“嘲讽”的单位放前线，再把远程单位放底线。不要为了花完金币而打乱射程。
+        </InfoCard>
+      </div>
+    ),
+  },
+  {
+    title: '距离决定谁能打到谁',
+    shortTitle: '精确距离',
+    kicker: '03 · 核心机制',
+    icon: <Move className="h-5 w-5" />,
+    content: (
+      <div className="space-y-4">
+        <RangeGuide />
+        <DistanceExample />
+        <InfoCard icon={<Eye className="h-4 w-4 text-blue-300" />} title="先看射程，再决定位置" tone="blue">
+          近战放得太后可能无目标可打；狙击离敌人太近会进入盲区；普通弓箭必须保持距离 2。空前线会让距离缩短，可能同时打开近战突破口并让狙击失去目标。
+        </InfoCard>
+      </div>
+    ),
+  },
+  {
+    title: '结束回合后会发生什么',
+    shortTitle: '攻击结算',
+    kicker: '04 · 自动战斗',
+    icon: <Swords className="h-5 w-5" />,
+    content: <CombatGuide />,
+  },
+  {
+    title: '先掌握六个常见关键词',
+    shortTitle: '技能状态',
+    kicker: '05 · 读懂卡牌',
+    icon: <Sparkles className="h-5 w-5" />,
+    content: (
+      <div className="space-y-4">
+        <SkillGuide />
+        <InfoCard icon={<BookOpen className="h-4 w-4 text-purple-300" />} title="不需要一次背完" tone="purple">
+          对战时可打开右上角的规则面板查看完整技能词典。新手阶段只需重点观察：射程、费用、攻击、生命、护甲和技能关键词。
+        </InfoCard>
+      </div>
+    ),
+  },
+  {
+    title: '完成一个回合循环',
+    shortTitle: '回合资源',
+    kicker: '06 · 准备出征',
+    icon: <Clock3 className="h-5 w-5" />,
+    content: (
+      <div className="space-y-4">
+        <TurnGuide />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <InfoCard icon={<CheckCircle2 className="h-4 w-4 text-emerald-300" />} title="回合结束前检查" tone="emerald">
+            确认每个单位都有可攻击目标、狙击没有贴脸、关键后排受到保护，再点击“结束回合”。
+          </InfoCard>
+          <InfoCard icon={<Target className="h-4 w-4 text-rose-300" />} title="最重要的策略" tone="rose">
+            每次部署都会改变距离。先想清楚“这张牌放下后，谁能打到谁”，再考虑单张牌有多强。
+          </InfoCard>
+        </div>
+      </div>
+    ),
+  },
+];
+
+export default function TutorialPage({ onClose, onBack }: TutorialPageProps) {
+  const [page, setPage] = useState(0);
+  const current = CHAPTERS[page];
+  const progress = ((page + 1) / CHAPTERS.length) * 100;
+
+  const goTo = (nextPage: number) => {
+    setPage(Math.min(Math.max(nextPage, 0), CHAPTERS.length - 1));
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#070a10] text-slate-100">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_-20%,rgba(245,158,11,0.14),transparent_40%),radial-gradient(circle_at_90%_70%,rgba(37,99,235,0.1),transparent_35%)]" />
+
+      <header className="relative z-10 shrink-0 border-b border-white/10 bg-slate-950/85 px-3 py-2.5 backdrop-blur-xl sm:px-5">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="flex h-8 items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 text-[11px] font-bold text-slate-300 transition hover:border-white/20 hover:bg-white/10 hover:text-white"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">返回</span>
+              </button>
+            )}
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-400/25 bg-amber-400/10 text-amber-300">
+              <BookOpen className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="truncate text-xs font-black tracking-wide text-white sm:text-sm">战争学院 · 新兵手册</div>
+              <div className="mt-0.5 hidden items-center gap-1 text-[9px] text-slate-500 sm:flex">
+                <Clock3 className="h-3 w-3" /> 预计阅读 4 分钟
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-bold text-slate-500">{page + 1} / {CHAPTERS.length}</span>
+            <button
+              onClick={onClose}
+              aria-label="关闭教程"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-slate-400 transition hover:bg-white/10 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        <div className="absolute bottom-0 left-0 h-0.5 bg-amber-400 transition-all duration-300" style={{ width: `${progress}%` }} />
+      </header>
+
+      <div className="relative z-10 mx-auto flex min-h-0 w-full max-w-6xl flex-1">
+        <aside className="hidden w-56 shrink-0 border-r border-white/10 px-3 py-5 lg:block">
+          <div className="mb-3 px-2 text-[9px] font-black uppercase tracking-[0.2em] text-slate-600">学习路线</div>
+          <nav className="space-y-1.5">
+            {CHAPTERS.map((chapter, index) => (
+              <button
+                key={chapter.shortTitle}
+                onClick={() => goTo(index)}
+                className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
+                  index === page
+                    ? 'border-amber-400/30 bg-amber-400/10 text-white'
+                    : index < page
+                      ? 'border-transparent text-slate-400 hover:bg-white/5'
+                      : 'border-transparent text-slate-600 hover:bg-white/5 hover:text-slate-400'
+                }`}
+              >
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${
+                  index === page ? 'bg-amber-400 text-slate-950' : index < page ? 'bg-emerald-400/15 text-emerald-300' : 'bg-white/5'
+                }`}>
+                  {index < page ? <CheckCircle2 className="h-3.5 w-3.5" /> : index + 1}
+                </span>
+                <span className="text-xs font-bold">{chapter.shortTitle}</span>
+              </button>
+            ))}
+          </nav>
+        </aside>
+
+        <main className="min-w-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-4xl px-3 py-5 sm:px-6 sm:py-8">
+            <div className="mb-5 flex gap-2 overflow-x-auto pb-1 lg:hidden">
+              {CHAPTERS.map((chapter, index) => (
+                <button
+                  key={chapter.shortTitle}
+                  onClick={() => goTo(index)}
+                  aria-label={`前往${chapter.shortTitle}`}
+                  className={`h-1.5 shrink-0 rounded-full transition-all ${
+                    index === page ? 'w-8 bg-amber-400' : index < page ? 'w-4 bg-emerald-400/60' : 'w-4 bg-slate-700'
+                  }`}
+                />
+              ))}
+            </div>
+
+            <div className="mb-5">
+              <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-amber-400/80">
+                {current.icon}
+                {current.kicker}
+              </div>
+              <h1 className="text-xl font-black tracking-tight text-white sm:text-3xl">{current.title}</h1>
+              <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-400 sm:text-sm">
+                用清晰的战场图解掌握规则。先理解位置与距离，再学习卡牌组合。
+              </p>
+            </div>
+
+            {current.content}
+          </div>
+        </main>
+      </div>
+
+      <footer className="relative z-10 shrink-0 border-t border-white/10 bg-slate-950/90 px-3 py-2.5 backdrop-blur-xl sm:px-5">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+          <button
+            onClick={() => goTo(page - 1)}
+            disabled={page === 0}
+            className="flex h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 text-xs font-bold text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            上一章
+          </button>
+          <span className="hidden text-[10px] text-slate-600 sm:block">{current.shortTitle}</span>
+          {page < CHAPTERS.length - 1 ? (
+            <button
+              onClick={() => goTo(page + 1)}
+              className="flex h-9 items-center gap-1.5 rounded-lg bg-amber-400 px-4 text-xs font-black text-slate-950 transition hover:bg-amber-300"
+            >
+              下一章
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          ) : (
+            <button
+              onClick={onClose}
+              className="flex h-9 items-center gap-1.5 rounded-lg bg-emerald-400 px-4 text-xs font-black text-slate-950 transition hover:bg-emerald-300"
+            >
+              <Swords className="h-4 w-4" />
+              我已了解，开始战斗
+            </button>
+          )}
+        </div>
+      </footer>
     </div>
   );
 }

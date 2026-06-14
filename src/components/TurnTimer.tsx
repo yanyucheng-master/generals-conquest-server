@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { Clock, AlertTriangle } from 'lucide-react';
 
 interface Props {
@@ -8,22 +7,9 @@ interface Props {
 }
 
 export default function TurnTimer({ remainingMs, totalMs, isRunning }: Props) {
-  const [flash, setFlash] = useState(false);
   const pct = totalMs > 0 ? (remainingMs / totalMs) * 100 : 0;
   const seconds = Math.ceil(remainingMs / 1000);
-
-  // 低于5秒时闪烁警告
-  useEffect(() => {
-    if (remainingMs <= 5000 && remainingMs > 0) {
-      setFlash(true);
-      const interval = setInterval(() => {
-        setFlash(prev => !prev);
-      }, 300);
-      return () => clearInterval(interval);
-    } else {
-      setFlash(false);
-    }
-  }, [remainingMs]);
+  const flash = remainingMs <= 5000 && remainingMs > 0;
 
   if (!isRunning && remainingMs === totalMs) return null;
 

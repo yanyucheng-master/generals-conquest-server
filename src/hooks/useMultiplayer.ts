@@ -1064,19 +1064,19 @@ export function useMultiplayer(): UseMultiplayerReturn {
     const unit = g.sniperQueue[0];
     const targets = getTargetsInRange(g, unit, 'player');
     return new Set(targets.map(t => t.key));
-  }, [gameState?.sniperMode]);
+  }, []);
 
   const getEnemyFrontExists = useCallback((): boolean => {
     const g = gameRef.current;
     if (!g) return true;
     return !isRowEmpty(g, 1);
-  }, [gameState]);
+  }, []);
 
   const getPlayerFrontExists = useCallback((): boolean => {
     const g = gameRef.current;
     if (!g) return true;
     return !isRowEmpty(g, 2);
-  }, [gameState]);
+  }, []);
 
   const runPlayerAttackPhase = useCallback((onComplete?: () => void) => {
     const g = gameRef.current;

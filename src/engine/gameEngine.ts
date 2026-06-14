@@ -101,8 +101,8 @@ function cardToUnit(card: CardDef): Unit {
     damageType: getDamageType(card.subtype),
     canAttack: true, // v1.0: 所有单位部署后都能攻击
     // frozen 字段已废弃（freeze技能已删除）
-    frozen: false as any,
-    frozenTurns: 0 as any,
+    frozen: false,
+    frozenTurns: 0,
     equip: null,
     bleed: 0,
     poison: 0,
@@ -409,20 +409,21 @@ function applySilenceToEnemyBoard(
   enemyBoard: Record<BoardKey, Unit>,
   level: number,
   who: PlayerType,
+  sourceName?: string,
 ): void {
   for (const u of Object.values(enemyBoard)) {
     u.silenceTurns = Math.max(u.silenceTurns, level);
   }
-  addLog(state, `🔇 沉默${level}：敌方单位技能失效${level}回合`, who);
+  addLog(state, `🔇 ${sourceName ? `${sourceName} ` : ''}沉默${level}：敌方单位技能失效${level}回合`, who);
 }
 
-function applyHolyLight(state: GameState, who: PlayerType): void {
+function applyHolyLight(state: GameState, who: PlayerType, sourceName?: string): void {
   const enemy = who === 'player' ? state.enemy : state.player;
   if (enemy.riddleActive) {
     const dropped = enemy.hand.filter(c => c.type === '法术').length;
     enemy.hand = enemy.hand.filter(c => c.type !== '法术');
     enemy.riddleActive = false;
-    addLog(state, `✨ 圣光：敌方弃掉${dropped}张已激活谜语`, who);
+    addLog(state, `✨ ${sourceName ? `${sourceName} ` : ''}圣光：敌方弃掉${dropped}张已激活谜语`, who);
     return;
   }
   const spellIdxs = enemy.hand
@@ -431,30 +432,30 @@ function applyHolyLight(state: GameState, who: PlayerType): void {
   if (spellIdxs.length > 0) {
     const idx = spellIdxs[Math.floor(rng() * spellIdxs.length)];
     const [discarded] = enemy.hand.splice(idx, 1);
-    addLog(state, `✨ 圣光：敌方弃掉【${discarded.name}】`, who);
+    addLog(state, `✨ ${sourceName ? `${sourceName} ` : ''}圣光：敌方弃掉【${discarded.name}】`, who);
   }
 }
 
-function applyRiddleRealm(state: GameState, who: PlayerType): void {
+function applyRiddleRealm(state: GameState, who: PlayerType, sourceName?: string): void {
   const p = who === 'player' ? state.player : state.enemy;
   if (p.hand.some(c => c.type === '法术')) {
     p.riddleActive = true;
-    addLog(state, `🔮 谜境激活：手牌谜语法术已就绪`, who);
+    addLog(state, `🔮 ${sourceName ? `${sourceName} ` : ''}谜境激活：手牌谜语法术已就绪`, who);
   } else {
-    addLog(state, `🔮 谜境激活（当前手牌无法术）`, who);
+    addLog(state, `🔮 ${sourceName ? `${sourceName} ` : ''}谜境激活（当前手牌无法术）`, who);
   }
 }
 
 function applyDeployUnitPassives(state: GameState, unit: Unit, who: PlayerType): void {
   const enemy = who === 'player' ? state.enemy : state.player;
   if (unit.skills.includes('silence')) {
-    applySilenceToEnemyBoard(state, enemy.board, getSkillLevel(unit, 'silence'), who);
+    applySilenceToEnemyBoard(state, enemy.board, getSkillLevel(unit, 'silence'), who, unit.name);
   }
   if (unit.skills.includes('holyLight')) {
-    applyHolyLight(state, who);
+    applyHolyLight(state, who, unit.name);
   }
   if (unit.skills.includes('riddleRealm')) {
-    applyRiddleRealm(state, who);
+    applyRiddleRealm(state, who, unit.name);
   }
 }
 
@@ -516,6 +517,7 @@ function getSkillLevelFromCard(card: { desc?: string; name?: string }, skillId: 
     'shield': /\+(\d+)护甲/,
     'silence': /沉默(\d+)/,
     'balance': /均衡(\d+)/,
+    'healHQ': /总部(?:恢复|回复)(\d+)/,
   };
   const pattern = patterns[skillId];
   if (pattern && card.desc) {
@@ -524,7 +526,7 @@ function getSkillLevelFromCard(card: { desc?: string; name?: string }, skillId: 
   }
   // 默认值
   const defaults: Record<string, number> = {
-    'heal': 2, 'aoeHeal': 2, 'magicDmg': 2, 'shield': 2, 'silence': 1, 'balance': 4,
+    'heal': 2, 'aoeHeal': 2, 'magicDmg': 2, 'shield': 2, 'silence': 1, 'balance': 4, 'healHQ': 3,
   };
   return defaults[skillId] || 1;
 }
@@ -559,7 +561,7 @@ export function getDistance(state: GameState, fromRow: number, toRow: number): n
   });
 
   let idxA = rows.indexOf(fromRow);
-  let idxB = rows.indexOf(toRow);
+  const idxB = rows.indexOf(toRow);
   let steps = 0;
   const dir = idxB > idxA ? 1 : -1;
 
@@ -799,7 +801,7 @@ export function applyDamage(
     if (attacker.skills.includes('lifesteal') && actualDmg > 0) {
       const healer = attackerWho === 'player' ? state.player : state.enemy;
       healer.hp = Math.min(healer.hp + actualDmg, healer.maxHp);
-      addLog(state, `💚 吸血：恢复 ${actualDmg} 生命`, attackerWho);
+      addLog(state, `💚 ${attacker.name} 吸血：恢复 ${actualDmg} 生命`, attackerWho);
     }
 
     // HQ可以受中毒/流血（Bug 3 修复）
@@ -907,7 +909,7 @@ export function applyDamage(
   // 强化贯穿：完全无视护甲值（护甲视为0，不消耗不减伤）
   if (hasPiercePlus && dmgType === '物理' && targetUnit.armor > 0) {
     // 护甲完全无视，actualDmg 保持不变
-    addLog(state, `💥 强化贯穿：无视护甲！`, attackerWho);
+    addLog(state, `💥 ${attacker.name} 强化贯穿：无视护甲！`, attackerWho);
   }
   // 贯穿：护甲值不消耗，仅作为减伤参考，溢出伤害正常扣血
   else if (hasPierce && targetUnit.armor > 0 && dmgType === '物理') {
@@ -960,32 +962,32 @@ export function applyDamage(
   if (attacker.skills.includes('tear') && targetUnit.bleed > 0) {
     const tearDmg = targetUnit.bleed;
     targetUnit.hp -= tearDmg;
-    addLog(state, `🔪 撕裂！${targetUnit.name} 额外 ${tearDmg} 真实伤害`, attackerWho);
+    addLog(state, `🔪 ${attacker.name} 撕裂！${targetUnit.name} 额外 ${tearDmg} 真实伤害`, attackerWho);
   }
   if (attacker.skills.includes('bleed')) {
     const bleedLevel = getSkillLevel(attacker, 'bleed');
     targetUnit.bleed += bleedLevel;
-    addLog(state, `🩸 ${targetUnit.name} 流血+${bleedLevel}`, attackerWho);
+    addLog(state, `🩸 ${attacker.name} 对 ${targetUnit.name} 附加流血+${bleedLevel}！`, attackerWho);
   }
 
   // 2. 先毒爆（用目标已有的中毒层数），再附加新中毒
   if (attacker.skills.includes('poisonBurst') && targetUnit.poison > 0) {
     const pbDmg = targetUnit.poison;
     targetUnit.hp -= pbDmg;
-    addLog(state, `💣 毒爆！${targetUnit.name} 额外 ${pbDmg} 真实伤害`, attackerWho);
+    addLog(state, `💣 ${attacker.name} 毒爆！${targetUnit.name} 额外 ${pbDmg} 真实伤害`, attackerWho);
     targetUnit.poison = 0;
   }
   if (attacker.skills.includes('poison')) {
     const poisonLevel = getSkillLevel(attacker, 'poison');
     targetUnit.poison += poisonLevel;
-    addLog(state, `☠️ ${targetUnit.name} 中毒+${poisonLevel}`, attackerWho);
+    addLog(state, `☠️ ${attacker.name} 对 ${targetUnit.name} 附加中毒+${poisonLevel}！`, attackerWho);
   }
 
   // 吸血
   if (attacker.skills.includes('lifesteal') && actualDmg > 0) {
     const healer = attackerWho === 'player' ? state.player : state.enemy;
     healer.hp = Math.min(healer.hp + actualDmg, healer.maxHp);
-    addLog(state, `💚 吸血：恢复 ${actualDmg} 生命`, attackerWho);
+    addLog(state, `💚 ${attacker.name} 吸血：恢复 ${actualDmg} 生命`, attackerWho);
   }
 
   // 击杀检查
@@ -997,7 +999,7 @@ export function applyDamage(
       const extractPower = getSkillLevel(attacker, 'extract'); // 从desc解析，默认2
       const healer = attackerWho === 'player' ? state.player : state.enemy;
       healer.gold = Math.min(healer.gold + extractPower, 99);
-      addLog(state, `💰 萃取 +${extractPower}金币`, attackerWho);
+      addLog(state, `💰 ${attacker.name} 萃取 +${extractPower}金币`, attackerWho);
     }
 
     // 悬赏
@@ -1231,7 +1233,7 @@ export function deployUnitWithSync(state: GameState, cardIdx: number, row: numbe
       }
     }
     unit.magicBoostUsed = true; // ✅ 一次性标记
-    addLog(state, `✨ 法力增幅：魔法友军+${boostCount}攻（持续到敌方回合结束）`, who);
+    addLog(state, `✨ ${unit.name} 法力增幅${boostCount}：魔法友军+${boostCount}攻（持续到敌方回合结束）`, who);
   }
 
   // 魔术（传送门、幻术大师等单位部署时触发）
@@ -1327,7 +1329,7 @@ export function mirrorEnemyDeploy(
       }
     }
     unit.magicBoostUsed = true;
-    addLog(state, `✨ 法力增幅：魔法友军+${boostCount}攻（持续到敌方回合结束）`, 'enemy');
+    addLog(state, `✨ ${unit.name} 法力增幅${boostCount}：魔法友军+${boostCount}攻（持续到敌方回合结束）`, 'enemy');
   }
 
   if (sync?.swapTargets) {
@@ -1579,7 +1581,7 @@ export function mirrorEnemySpell(
 
   // 治疗总部（联机同步：敌方治疗其HQ）
   if (skills.includes('healHQ')) {
-    const healAmount = 3;
+    const healAmount = getSkillLevelFromCard(card, 'healHQ');
     const oldHp = enemy.hp;
     enemy.hp = Math.min(enemy.hp + healAmount, enemy.maxHp);
     addLog(state, `💚 ${card.name}：敌方HQ恢复${enemy.hp - oldHp}点生命`, 'enemy');
@@ -2046,7 +2048,7 @@ export function castSpellWithSync(state: GameState, cardIdx: number, targetKey: 
 
   // 治疗总部
   if (skills.includes('healHQ')) {
-    const healAmount = 3;
+    const healAmount = getSkillLevelFromCard(card, 'healHQ');
     const oldHp = self.hp;
     self.hp = Math.min(self.hp + healAmount, self.maxHp);
     addLog(state, `💚 ${card.name}：总部恢复${self.hp - oldHp}点生命`, who);
@@ -2131,7 +2133,7 @@ export function executeSingleAttack(state: GameState, unitKey: BoardKey, who: Pl
   state.attackingUnit = unitKey;
 
   // 计算攻击加成
-  let bonusAtk = getUnitAttackBonus(unit, p);
+  const bonusAtk = getUnitAttackBonus(unit, p);
 
   // 狙击处理
   if (unit.subtype === '狙击') {
@@ -2245,9 +2247,7 @@ export function resolveAllSnipers(state: GameState, targetKey: BoardKey): Damage
     }
 
     // 狙击不享受战术指挥/射击指挥加成
-    let bonusAtk = 0;
-
-    const evt = applyDamage(state, targetKey, unit.atk + bonusAtk, unit, 'player');
+    const evt = applyDamage(state, targetKey, unit.atk, unit, 'player');
     if (evt) events.push(evt);
   }
 

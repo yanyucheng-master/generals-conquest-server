@@ -1,13 +1,26 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
-import type { BoardKey, Unit, Skill, PlayerState } from '@/types/game';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import type { BoardKey, CardDef, PlayerState, Skill, Unit } from '@/types/game';
 import type { useGame } from '@/hooks/useGame';
 import { QUALITY_COLORS } from '@/data/cards';
 import { parseSkillLabels } from '@/utils/skillLabels';
 import RulePanel from './RulePanel';
 import {
-  Heart, Shield, Swords, Coins, Library,
-  Crosshair, ChevronRight, ScrollText,
-  Droplets, Skull, VolumeX,
+  AlertTriangle,
+  ChevronRight,
+  Coins,
+  Crosshair,
+  Crown,
+  Flag,
+  Hand,
+  Heart,
+  Library,
+  ScrollText,
+  Shield,
+  Sparkles,
+  Swords,
+  Target,
+  X,
+  Zap,
 } from 'lucide-react';
 
 interface Props {
@@ -16,613 +29,787 @@ interface Props {
   isMyTurn?: boolean;
 }
 
+const FACTION_ART: Record<string, string> = {
+  帝国军团: '/unit_empire_champion.jpg',
+  荒野游侠: '/unit_wild_ranger.jpg',
+  奥术学院: '/unit_arcane_mage.jpg',
+  通用: '/main-menu-war-room.jpg',
+};
+
+const FACTION_ACCENT: Record<string, string> = {
+  帝国军团: '#ef4444',
+  荒野游侠: '#22c55e',
+  奥术学院: '#3b82f6',
+  通用: '#f59e0b',
+};
+
+const PHASE_LABELS = {
+  resource: '资源阶段',
+  deploy: '部署阶段',
+  attack: '攻击结算',
+  end: '回合结束',
+};
+
 function getHpColor(pct: number): string {
-  if (pct > 60) return 'bg-emerald-500';
-  if (pct > 30) return 'bg-yellow-500';
-  return 'bg-red-500';
+  if (pct > 60) return 'bg-emerald-400';
+  if (pct > 30) return 'bg-amber-400';
+  return 'bg-rose-500';
 }
 
-function getQualityStyle(q: string) {
-  return QUALITY_COLORS[q] || QUALITY_COLORS['铜'];
+function getQualityStyle(quality: string) {
+  return QUALITY_COLORS[quality] || QUALITY_COLORS.铜;
+}
+
+function getFactionArt(faction: string) {
+  return FACTION_ART[faction] ?? FACTION_ART.通用;
+}
+
+function getFactionAccent(faction: string) {
+  return FACTION_ACCENT[faction] ?? FACTION_ACCENT.通用;
 }
 
 export default function GameBoard({ game, multiplayer, isMyTurn }: Props) {
   const { gameState } = game;
-  const isDisabled = multiplayer && !isMyTurn;
-  const [logOpen, setLogOpen] = useState(true);
+  const isDisabled = Boolean(multiplayer && !isMyTurn);
+  const [logOpen, setLogOpen] = useState(false);
   const cellRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const [beamStyle, setBeamStyle] = useState<React.CSSProperties>({ display: 'none' });
+  const [beamStyle, setBeamStyle] = useState<CSSProperties>({ display: 'none' });
+  const [skillBeamStyle, setSkillBeamStyle] = useState<CSSProperties>({ display: 'none' });
 
-  // 动态计算攻击连线坐标
   useEffect(() => {
     const line = game.attackLine;
-    if (!line) {
-      setBeamStyle({ display: 'none' });
-      return;
-    }
-    const fromEl = cellRefs.current.get(line.from);
-    const toEl = cellRefs.current.get(line.to);
-    if (!fromEl || !toEl) {
-      setBeamStyle({ display: 'none' });
-      return;
-    }
-    requestAnimationFrame(() => {
-      const f = fromEl.getBoundingClientRect();
-      const t = toEl.getBoundingClientRect();
-      const sx = f.left + f.width / 2;
-      const sy = f.top + f.height / 2;
-      const ex = t.left + t.width / 2;
-      const ey = t.top + t.height / 2;
-      const len = Math.sqrt((ex - sx) ** 2 + (ey - sy) ** 2);
-      const ang = Math.atan2(ey - sy, ex - sx) * 180 / Math.PI;
+    const frame = requestAnimationFrame(() => {
+      if (!line) {
+        setBeamStyle({ display: 'none' });
+        return;
+      }
+      const fromEl = cellRefs.current.get(line.from);
+      const toEl = cellRefs.current.get(line.to);
+      if (!fromEl || !toEl) {
+        setBeamStyle({ display: 'none' });
+        return;
+      }
+      const from = fromEl.getBoundingClientRect();
+      const to = toEl.getBoundingClientRect();
+      const startX = from.left + from.width / 2;
+      const startY = from.top + from.height / 2;
+      const endX = to.left + to.width / 2;
+      const endY = to.top + to.height / 2;
+      const length = Math.sqrt((endX - startX) ** 2 + (endY - startY) ** 2);
+      const angle = Math.atan2(endY - startY, endX - startX) * 180 / Math.PI;
       setBeamStyle({
-        position: 'fixed', left: sx, top: sy,
-        width: len, height: 2.5,
-        transform: `rotate(${ang}deg)`, transformOrigin: 'left center',
-        background: 'linear-gradient(90deg, #ff3333 0%, #ff8800 60%, transparent 100%)',
-        zIndex: 45, pointerEvents: 'none', opacity: 0.9,
-        boxShadow: '0 0 6px rgba(255,50,50,0.6), 0 0 12px rgba(255,136,0,0.3)',
+        position: 'fixed',
+        left: startX,
+        top: startY,
+        width: length,
+        height: 5,
+        transform: `rotate(${angle}deg)`,
+        transformOrigin: 'left center',
+        background: 'linear-gradient(90deg, #fff7b2 0%, #f97316 45%, #ef4444 80%, transparent 100%)',
+        zIndex: 45,
+        pointerEvents: 'none',
+        opacity: 0.96,
+        boxShadow: '0 0 8px rgba(255,247,178,.9), 0 0 20px rgba(249,115,22,.7)',
       });
     });
+    return () => cancelAnimationFrame(frame);
   }, [game.attackLine]);
 
-  const setCellRef = useCallback((key: BoardKey, el: HTMLDivElement | null) => {
-    if (el) cellRefs.current.set(key, el);
+  useEffect(() => {
+    const line = game.skillLine;
+    const frame = requestAnimationFrame(() => {
+      if (!line) {
+        setSkillBeamStyle({ display: 'none' });
+        return;
+      }
+      const fromEl = cellRefs.current.get(line.from);
+      const toEl = cellRefs.current.get(line.to);
+      if (!fromEl || !toEl) {
+        setSkillBeamStyle({ display: 'none' });
+        return;
+      }
+      const from = fromEl.getBoundingClientRect();
+      const to = toEl.getBoundingClientRect();
+      const startX = from.left + from.width / 2;
+      const startY = from.top + from.height / 2;
+      const endX = to.left + to.width / 2;
+      const endY = to.top + to.height / 2;
+      const length = Math.sqrt((endX - startX) ** 2 + (endY - startY) ** 2);
+      const angle = Math.atan2(endY - startY, endX - startX) * 180 / Math.PI;
+      setSkillBeamStyle({
+        position: 'fixed',
+        left: startX,
+        top: startY,
+        width: length,
+        height: 5,
+        transform: `rotate(${angle}deg)`,
+        transformOrigin: 'left center',
+        background: 'linear-gradient(90deg, #f5d0fe 0%, #e879f9 20%, #f43f5e 68%, transparent 100%)',
+        zIndex: 46,
+        pointerEvents: 'none',
+        opacity: 0.98,
+        boxShadow: '0 0 9px rgba(245,208,254,.95), 0 0 24px rgba(244,63,94,.82)',
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [game.skillLine]);
+
+  const setCellRef = useCallback((key: BoardKey, element: HTMLDivElement | null) => {
+    if (element) cellRefs.current.set(key, element);
     else cellRefs.current.delete(key);
   }, []);
 
   if (!gameState) return null;
 
-  const p = gameState.player;
-  const e = gameState.enemy;
+  const player = gameState.player;
+  const enemy = gameState.enemy;
   const highlightCells = game.getHighlightCells();
   const snipeTargets = game.getSnipeTargets();
-  const playerHpPct = Math.max(0, p.hp / p.maxHp * 100);
-  const enemyHpPct = Math.max(0, e.hp / e.maxHp * 100);
+  const selectedCard = game.selectedCardIdx === null ? null : player.hand[game.selectedCardIdx];
+  const playerUnitCount = Object.keys(player.board).length;
+  const enemyUnitCount = Object.keys(enemy.board).length;
+  const phaseLabel = PHASE_LABELS[gameState.turnPhase] ?? '战斗中';
+  const canEndTurn = !isDisabled
+    && gameState.currentPlayer === 'player'
+    && !gameState.sniperMode
+    && !game.animating;
 
-  const attackerKey = gameState.attackingUnit;
-  const defenderKey = game.attackLine?.to || null;
+  const instruction = gameState.sniperMode
+    ? `为 ${gameState.sniperQueue.length} 个狙击单位选择共同目标`
+    : game.animating
+      ? '正在结算攻击，请观察战场'
+      : selectedCard
+        ? `${selectedCard.name} 已选中 · 点击发光格位`
+        : gameState.currentPlayer === 'player'
+          ? '选择一张手牌，规划本回合部署'
+          : '等待敌方完成部署';
 
   return (
-    <div className="relative w-full overflow-hidden flex select-none bg-[#0B0D14]" style={{ height: '100dvh', maxHeight: '-webkit-fill-available' }}>
-      {/* 背景 */}
-      <div className="absolute inset-0 bg-cover bg-center z-0 opacity-35" style={{ backgroundImage: 'url(/bg_war_table.jpg)' }} />
+    <div className="relative flex h-[100dvh] w-full select-none flex-col overflow-hidden bg-[#070a10] text-slate-100">
+      <div className="absolute inset-0 z-0 bg-cover bg-center opacity-45" style={{ backgroundImage: 'url(/bg_war_table.jpg)' }} />
+      <div className="absolute inset-0 z-[1] bg-[radial-gradient(circle_at_center,rgba(8,15,27,.1)_5%,rgba(3,7,13,.82)_88%)]" />
+      <div className="absolute inset-0 z-[1] opacity-25 [background-image:linear-gradient(rgba(255,255,255,.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.025)_1px,transparent_1px)] [background-size:48px_48px]" />
 
-      {/* 攻击光束 */}
-      {game.attackLine && beamStyle.display !== 'none' && <div style={beamStyle} />}
+      {game.attackLine && beamStyle.display !== 'none' && <div data-testid="attack-line" className="battle-beam battle-beam-attack" style={beamStyle} />}
+      {game.skillLine && skillBeamStyle.display !== 'none' && <div data-testid="skill-line" className="battle-beam battle-beam-skill" style={skillBeamStyle} />}
 
-      {/* 回合提示 */}
       {gameState.showTurnBanner && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-          <div className="turn-banner text-5xl font-bold text-yellow-400 tracking-wider"
-            style={{ fontFamily: "'Cinzel', serif", textShadow: '0 0 40px rgba(234,179,8,0.6)' }}>
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+          <div className="turn-banner rounded-2xl border border-amber-400/25 bg-black/75 px-8 py-4 text-3xl font-black tracking-[0.2em] text-amber-300 shadow-2xl shadow-amber-500/20 sm:text-5xl">
             第 {gameState.showTurnBanner} 回合
           </div>
         </div>
       )}
 
-      {/* 狙击横幅 */}
-      {gameState.showSnipeBanner && (
-        <div className="fixed top-[6%] left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-          <div className="snipe-banner">
-            <Crosshair className="w-4 h-4 inline mr-1.5" />
-            {gameState.sniperQueue.length}个狙击单位，请点击敌方目标
-          </div>
-        </div>
-      )}
-
-      {/* AI部署提示 */}
-      {game.aiDeploying && (
-        <div className="fixed top-[6%] left-1/2 -translate-x-1/2 z-40 pointer-events-none">
-          <div className="px-5 py-2 bg-black/70 border border-blue-500/40 rounded-lg text-blue-400 text-sm font-bold animate-pulse">
-            🤖 AI正在部署...
+      {(gameState.showSnipeBanner || game.aiDeploying) && (
+        <div className="pointer-events-none fixed left-1/2 top-16 z-50 -translate-x-1/2">
+          <div className={`flex items-center gap-2 rounded-full border px-5 py-2 text-xs font-black shadow-xl backdrop-blur-xl ${
+            gameState.showSnipeBanner
+              ? 'border-purple-400/50 bg-purple-950/85 text-purple-200'
+              : 'border-blue-400/40 bg-blue-950/85 text-blue-200'
+          }`}>
+            {gameState.showSnipeBanner ? <Crosshair className="h-4 w-4" /> : <Sparkles className="h-4 w-4 animate-pulse" />}
+            {gameState.showSnipeBanner
+              ? `${gameState.sniperQueue.length} 个狙击单位待指定目标`
+              : '敌方正在部署'}
           </div>
         </div>
       )}
 
       <RulePanel />
 
-      {/* ====== 左侧手牌区 ====== */}
-      <div className="relative z-10 w-[110px] sm:w-[148px] shrink-0 flex flex-col border-r border-gray-800/50 bg-black/40">
-        {/* 手牌标题 */}
-        <div className="px-2 py-1 border-b border-gray-800/50 flex items-center justify-between">
-          <span className="text-[11px] text-gray-300 font-bold">🎴 手牌 {p.hand.length}/6</span>
-          {p.discountNext > 0 && <span className="text-[9px] text-yellow-400 font-bold">-{p.discountNext}费</span>}
-        </div>
-        {/* 手牌列表（竖向可滚动） */}
-        <div className="flex-1 overflow-y-auto scrollbar-thin px-1.5 py-1 space-y-1.5">
-          {p.hand.map((card, i) => {
-            const qStyle = getQualityStyle(card.quality);
-            const cost = p.discountNext > 0 && card.type === '士兵' ? Math.max(0, card.cost - p.discountNext) : card.cost;
-            const affordable = cost <= p.gold;
-            const isSelected = game.selectedCardIdx === i;
-            return (
-              <HandCardLarge
-                key={i}
-                card={card}
-                cost={cost}
-                affordable={affordable}
-                isSelected={isSelected}
-                qStyle={qStyle}
-                onClick={() => game.selectCard(i)}
-              />
-            );
-          })}
-        </div>
-        {gameState.sniperMode && (
-          <div className="px-2 py-1 bg-purple-900/40 border-t border-purple-700/30 text-center">
-            <span className="text-[9px] text-purple-300 animate-pulse flex items-center justify-center gap-1">
-              <Crosshair className="w-3 h-3" />选择狙击目标
-            </span>
+      <header className="relative z-10 flex h-12 shrink-0 items-center justify-between border-b border-white/10 bg-slate-950/80 px-3 backdrop-blur-xl sm:px-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-amber-400/25 bg-amber-400/10 text-amber-300">
+            <Swords className="h-4 w-4" />
           </div>
-        )}
-      </div>
+          <div>
+            <div className="text-xs font-black tracking-wide text-white sm:text-sm">将领：征服</div>
+            <div className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-slate-600">Tactical Command</div>
+          </div>
+        </div>
 
-      {/* ====== 右侧主区域 ====== */}
-      <div className="relative z-10 flex-1 flex flex-col min-w-0">
-        {/* 联机模式：对方回合遮罩 */}
-        {isDisabled && (
-          <div className="absolute inset-0 z-50 bg-black/20 pointer-events-none flex items-start justify-center pt-16">
-            <div className="px-4 py-2 bg-black/60 border border-gray-700 rounded-lg text-gray-400 text-sm font-bold animate-pulse">
-              🤖 对手回合中...
-            </div>
-          </div>
-        )}
-        {/* 顶部：标题+敌方状态 */}
-        <div className="flex items-center justify-between px-1.5 sm:px-2 shrink-0 h-5 sm:h-6">
-          <span className="text-[9px] sm:text-[10px] font-bold text-yellow-500/80 shrink-0" style={{ fontFamily: "'Cinzel', serif" }}>
-            将领：征服<span className="text-[7px] sm:text-[8px] text-gray-500 ml-1">第{gameState.turn}回合</span>
+        <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full border border-white/10 bg-black/35 px-3 py-1.5">
+          <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">回合</span>
+          <b className="text-sm text-amber-300">{gameState.turn}</b>
+          <span className="h-3 w-px bg-white/10" />
+          <span className={`text-[10px] font-bold ${gameState.currentPlayer === 'player' ? 'text-blue-300' : 'text-rose-300'}`}>
+            {gameState.currentPlayer === 'player' ? '你的行动' : '敌方行动'}
           </span>
-          {/* 敌方状态 - 醒目显示在右上角 */}
-          <div className="flex items-center gap-1 sm:gap-1.5 bg-red-950/40 px-1.5 sm:px-2 py-px rounded border border-red-800/30">
-            <span className="text-[9px] sm:text-[10px] text-red-400 font-bold">🤖 AI</span>
-            {/* HP */}
-            <div className="flex items-center gap-0.5">
-              <Heart className="w-3 h-3 text-red-500 fill-red-500" />
-              <div className="w-10 h-2 bg-gray-800 rounded-full overflow-hidden">
-                <div className={`h-full ${getHpColor(enemyHpPct)}`} style={{ width: `${enemyHpPct}%` }} />
-              </div>
-              <span className="text-[9px] text-gray-200 font-bold">{Math.max(0, e.hp)}</span>
-            </div>
-            {e.hqArmor > 0 && <span className="text-[8px] text-blue-400"><Shield className="w-2.5 h-2.5 inline" />{e.hqArmor}</span>}
-            {/* 金币 - 黄色高亮 */}
-            <div className="flex items-center gap-0.5 px-1.5 py-px bg-yellow-900/50 rounded border border-yellow-600/30">
-              <Coins className="w-3 h-3 text-yellow-400" />
-              <span className="text-[10px] text-yellow-300 font-bold">{e.gold}</span>
-            </div>
-            {/* 牌库 */}
-            <div className="flex items-center gap-0.5">
-              <Library className="w-2.5 h-2.5 text-gray-500" />
-              <span className="text-[8px] text-gray-400">{e.deck.length}</span>
-            </div>
-          </div>
+          <span className="hidden rounded-full bg-white/5 px-2 py-0.5 text-[9px] text-slate-500 sm:inline">{phaseLabel}</span>
         </div>
 
-        {/* 战场 */}
-        <div className="relative flex-1 flex flex-col justify-center max-w-lg mx-auto w-full min-h-0 px-1">
-          {/* 敌方状态条 - 显示在敌方HQ上方 */}
-          <div className="flex justify-end items-center gap-1 mb-0.5 px-0">
-            <div className="flex items-center gap-1.5 sm:gap-2 bg-red-950/50 px-2 sm:px-3 py-0.5 rounded border border-red-700/40">
-              <span className="text-[9px] sm:text-[10px] text-red-400 font-bold">🤖 敌方</span>
-              <div className="flex items-center gap-0.5">
-                <Heart className="w-3 h-3 text-red-500 fill-red-500" />
-                <div className="w-12 h-2 bg-gray-800 rounded-full overflow-hidden">
-                  <div className={`h-full ${getHpColor(enemyHpPct)}`} style={{ width: `${enemyHpPct}%` }} />
-                </div>
-                <span className="text-[10px] text-gray-200 font-bold">{Math.max(0, e.hp)}</span>
+        <div className="flex items-center gap-2 pr-0 lg:pr-[265px]">
+          <button
+            type="button"
+            onClick={() => setLogOpen(value => !value)}
+            className={`flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[10px] font-bold transition ${
+              logOpen ? 'border-amber-400/30 bg-amber-400/10 text-amber-200' : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'
+            }`}
+          >
+            <ScrollText className="h-3.5 w-3.5" />
+            战报
+          </button>
+        </div>
+      </header>
+
+      <div className="relative z-10 flex min-h-0 flex-1">
+        <aside className="flex w-[154px] shrink-0 flex-col border-r border-white/10 bg-slate-950/80 backdrop-blur-xl sm:w-[210px] xl:w-[238px]">
+          <div className="shrink-0 border-b border-white/10 px-2.5 py-2.5 sm:px-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Hand className="h-3.5 w-3.5 text-amber-300" />
+                <span className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-300">作战手牌</span>
               </div>
-              {e.hqArmor > 0 && (
-                <span className="text-[9px] text-blue-400 flex items-center gap-px">
-                  <Shield className="w-3 h-3 inline" />{e.hqArmor}
-                </span>
-              )}
-              <div className="flex items-center gap-0.5 px-1.5 py-px bg-yellow-900/60 rounded border border-yellow-500/30">
-                <Coins className="w-3 h-3 text-yellow-400" />
-                <span className="text-[10px] text-yellow-300 font-bold">{e.gold}</span>
-              </div>
-              {/* 敌方手牌 */}
-              <div className="flex items-center gap-0.5 px-1.5 py-px bg-purple-900/40 rounded border border-purple-600/30">
-                <span className="text-[10px]">🎴</span>
-                <span className="text-[10px] text-purple-300 font-bold">{e.hand.length}</span>
-              </div>
+              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-bold text-slate-400">{player.hand.length}/6</span>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[9px]">
+              <span className="text-slate-600">可用金币</span>
+              <span className="flex items-center gap-1 font-black text-amber-300">
+                <Coins className="h-3 w-3" /> {player.gold}
+              </span>
+            </div>
+            <div className="mt-1.5 flex items-center justify-between rounded-md border border-amber-400/10 bg-amber-400/5 px-2 py-1 text-[8px]">
+              <span className="text-slate-600">本回合基础收入</span>
+              <span className="font-black text-amber-300/80">+{player.maxGold}</span>
             </div>
           </div>
 
-          {[0, 1, 2, 3].map(row => {
-            const isEnemy = row <= 1;
-            const isBack = row === 0 || row === 3;
-            const frontEmpty = isEnemy
-              ? !game.getEnemyFrontExists() && row === 1
-              : !game.getPlayerFrontExists() && row === 2;
-            const board = isEnemy ? e.board : p.board;
-            const labels = ['敌HQ', '敌前线', '我前线', '我HQ'];
+          <div className="scrollbar-thin flex-1 space-y-2 overflow-y-auto px-1.5 py-2 sm:px-2">
+            {player.hand.map((card, index) => {
+              const cost = player.discountNext > 0 && card.type === '士兵' ? Math.max(0, card.cost - player.discountNext) : card.cost;
+              return (
+                <HandCard
+                  key={`${card.id}-${index}`}
+                  card={card}
+                  cost={cost}
+                  affordable={cost <= player.gold}
+                  selected={game.selectedCardIdx === index}
+                  disabled={isDisabled || gameState.currentPlayer !== 'player' || game.animating}
+                  onClick={() => game.selectCard(index)}
+                />
+              );
+            })}
+          </div>
 
-            return (
-              <div key={row} className="flex items-stretch gap-0.5 py-px">
-                <div className="w-5 sm:w-6 flex flex-col items-center justify-center shrink-0">
-                  <span className={`text-[7px] sm:text-[8px] font-bold text-center leading-none ${isEnemy ? 'text-red-400' : 'text-blue-400'}`}>
-                    {labels[row]}
-                  </span>
-                  {frontEmpty && <span className="text-[7px] text-red-500 animate-pulse leading-none">空</span>}
-                  {!isEnemy && row === 2 && gameState.sniperMode && (
-                    <Crosshair className="w-3 h-3 text-purple-400 animate-pulse" />
-                  )}
+          <div className="shrink-0 border-t border-white/10 bg-black/20 p-2">
+            <div className={`rounded-lg border p-2 ${selectedCard ? 'border-amber-400/25 bg-amber-400/10' : 'border-white/5 bg-white/[0.025]'}`}>
+              <div className="flex items-start gap-2">
+                {selectedCard ? <Target className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" /> : <Hand className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-600" />}
+                <div className="min-w-0">
+                  <div className={`truncate text-[10px] font-black ${selectedCard ? 'text-white' : 'text-slate-500'}`}>
+                    {selectedCard ? selectedCard.name : '尚未选择手牌'}
+                  </div>
+                  <p className="mt-1 text-[8px] leading-3.5 text-slate-500">
+                    {selectedCard ? '战场中的发光格位可作为目标' : '点击手牌查看可部署位置'}
+                  </p>
                 </div>
+              </div>
+            </div>
+          </div>
+        </aside>
 
-                <div className="flex-1 grid grid-cols-3 gap-0.5">
-                  {[0, 1, 2].map(col => {
-                    const key: BoardKey = `${row}-${col}`;
-                    const isHQ = isBack && col === 1;
-                    const unit = board[key];
-                    const isHighlighted = highlightCells.has(key);
-                    const isSnipeTarget = snipeTargets.has(key);
-                    const isAttacking = attackerKey === key;
-                    const isDefending = defenderKey === key;
-                    const isShaking = game.shakeCell === key;
-                    const hasDeployFlash = game.deployFlash?.key === key;
+        <main className="relative flex min-w-0 flex-1 flex-col">
+          {isDisabled && (
+            <div className="absolute inset-0 z-40 flex items-start justify-center bg-black/30 pt-20">
+              <div className="rounded-full border border-white/10 bg-black/70 px-5 py-2 text-xs font-black text-slate-300 backdrop-blur-xl">
+                等待对手行动
+              </div>
+            </div>
+          )}
 
-                    return (
-                      <div
-                        key={key}
-                        ref={el => setCellRef(key, el)}
-                        onClick={() => !isDisabled && game.handleCellClick(row, col)}
-                        className={`
-                          relative rounded border overflow-hidden
-                          flex items-center justify-center
-                          transition-all duration-150
-                          min-h-[40px] sm:min-h-[44px]
-                          ${isDisabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}
-                          ${isHQ
-                            ? 'border-yellow-600/40 bg-gradient-to-b from-purple-900/30 to-purple-950/50'
-                            : unit
-                              ? 'border-gray-600/30 bg-gray-900/60'
-                              : 'border-gray-700/20 bg-gray-950/20 hover:border-gray-500/30'
-                          }
-                          ${isHighlighted ? 'ring-1 ring-yellow-400/70' : ''}
-                          ${isSnipeTarget ? 'ring-1 ring-purple-400/70 animate-pulse' : ''}
-                          ${isAttacking ? 'attacking-now' : ''}
-                          ${isShaking ? 'shake-cell' : ''}
-                          ${frontEmpty && !isBack && !isHQ ? 'border-dashed border-red-800/20' : ''}
-                        `}
-                        style={{ aspectRatio: '4/3' }}
-                      >
-                        {isAttacking && (
-                          <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 z-30 px-1 py-px bg-red-600 rounded-sm text-[7px] text-white font-bold whitespace-nowrap shadow-lg animate-pulse">
-                            ⚔️攻击中
-                          </div>
-                        )}
-                        {isDefending && (
-                          <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 z-30 px-1 py-px bg-orange-600 rounded-sm text-[7px] text-white font-bold whitespace-nowrap shadow-lg animate-pulse">
-                            🎯被攻击
-                          </div>
-                        )}
+          <div className="flex min-h-0 flex-1 flex-col px-2 py-1 sm:px-4">
+            <CommanderStatus
+              side="enemy"
+              player={enemy}
+              unitCount={enemyUnitCount}
+              active={gameState.currentPlayer === 'enemy'}
+            />
 
-                        {isHQ ? (
-                          <HQCell hp={isEnemy ? e.hp : p.hp} maxHp={isEnemy ? e.maxHp : p.maxHp} armor={isEnemy ? e.hqArmor : p.hqArmor} isEnemy={isEnemy} />
-                        ) : unit ? (
-                          <UnitCell unit={unit} owner={isEnemy ? e : p} enemy={isEnemy ? p : e} />
-                        ) : (
-                          <span className="text-gray-700 text-[9px]">{['左', '中', '右'][col]}</span>
-                        )}
+            <div className="relative mx-auto flex min-h-0 w-full max-w-[760px] flex-1 items-center py-1">
+              <div className="w-full space-y-1 sm:space-y-1.5">
+                {[0, 1, 2, 3].map(row => {
+                  const isEnemy = row <= 1;
+                  const isBack = row === 0 || row === 3;
+                  const frontEmpty = isEnemy
+                    ? !game.getEnemyFrontExists() && row === 1
+                    : !game.getPlayerFrontExists() && row === 2;
+                  const board = isEnemy ? enemy.board : player.board;
+                  const rowLabels = ['敌方底线', '敌方前线', '我方前线', '我方底线'];
 
-                        {hasDeployFlash && (
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-                            <div className="deploy-flash-ring" />
-                          </div>
-                        )}
-
-                        {game.damagePopups
-                          .filter(dp => dp.key === key)
-                          .map(dp => (
-                            <div key={dp.id} className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
-                              <span className="damage-float text-red-500 font-black text-lg drop-shadow-lg"
-                                style={{ textShadow: '0 0 6px rgba(0,0,0,0.9), 0 2px 4px rgba(0,0,0,0.9)' }}>
-                                -{dp.amount}
-                              </span>
-                            </div>
-                          ))}
-
-                        {game.skillFloats
-                          .filter(sf => sf.key === key)
-                          .map(sf => (
-                            <div key={sf.id} className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
-                              <span className={`skill-float ${sf.color} font-black text-sm drop-shadow-lg`}
-                                style={{ textShadow: '0 0 8px rgba(0,0,0,0.9), 0 2px 4px rgba(0,0,0,0.9)' }}>
-                                {sf.text}
-                              </span>
-                            </div>
-                          ))}
+                  return (
+                    <div key={row} className={`grid grid-cols-[48px_1fr] items-stretch gap-1.5 sm:grid-cols-[64px_1fr] sm:gap-2 ${row === 1 ? 'mb-1.5 sm:mb-2' : ''}`}>
+                      <div className="flex flex-col items-center justify-center">
+                        <span className={`text-center text-[8px] font-black leading-3 sm:text-[9px] ${isEnemy ? 'text-rose-400/80' : 'text-blue-400/80'}`}>
+                          {rowLabels[row]}
+                        </span>
+                        {frontEmpty && <span className="mt-1 rounded-full border border-rose-400/20 bg-rose-400/10 px-1.5 text-[7px] font-bold text-rose-300">距离跳过</span>}
                       </div>
-                    );
-                  })}
+
+                      <div className={`grid grid-cols-3 gap-1 rounded-xl border p-1 sm:gap-1.5 sm:p-1.5 ${
+                        isEnemy ? 'border-rose-500/10 bg-rose-950/10' : 'border-blue-500/10 bg-blue-950/10'
+                      }`}>
+                        {[0, 1, 2].map(col => {
+                          const key: BoardKey = `${row}-${col}`;
+                          const isHQ = isBack && col === 1;
+                          const unit = board[key];
+                          const occupiedDeployCell = selectedCard?.type === '士兵' && Boolean(unit);
+                          const highlighted = highlightCells.has(key) && !occupiedDeployCell;
+                          const snipeTarget = snipeTargets.has(key);
+                          const attacking = gameState.attackingUnit === key;
+                          const defending = game.attackLine?.to === key;
+                          const shaking = game.shakeCell === key;
+                          const deployFlash = game.deployFlash?.key === key;
+
+                          return (
+                            <div
+                              key={key}
+                              data-testid={`cell-${key}`}
+                              ref={element => setCellRef(key, element)}
+                              onClick={() => !isDisabled && game.handleCellClick(row, col)}
+                              className={`group relative min-h-[54px] overflow-hidden rounded-lg border transition-all duration-200 sm:min-h-[64px] lg:min-h-[76px] xl:min-h-[82px] ${
+                                isDisabled ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'
+                              } ${
+                                isHQ
+                                  ? 'border-amber-400/25 bg-gradient-to-b from-purple-950/65 to-slate-950/80'
+                                  : unit
+                                    ? 'border-white/10 bg-slate-950/85'
+                                    : 'border-dashed border-white/10 bg-black/20 hover:border-white/20 hover:bg-white/[0.035]'
+                              } ${highlighted ? 'battle-cell-valid' : ''} ${snipeTarget ? 'battle-cell-snipe' : ''} ${
+                                attacking ? 'attacking-now' : ''
+                              } ${shaking ? 'shake-cell' : ''}`}
+                            >
+                              {attacking && <CellActionLabel tone="attack" text="正在攻击" />}
+                              {defending && <CellActionLabel tone="defend" text="受到攻击" />}
+
+                              {isHQ ? (
+                                <HQCell
+                                  hp={isEnemy ? enemy.hp : player.hp}
+                                  maxHp={isEnemy ? enemy.maxHp : player.maxHp}
+                                  armor={isEnemy ? enemy.hqArmor : player.hqArmor}
+                                  bleed={isEnemy ? enemy.bleed : player.bleed}
+                                  poison={isEnemy ? enemy.poison : player.poison}
+                                  enemy={isEnemy}
+                                />
+                              ) : unit ? (
+                                <UnitCell unit={unit} owner={isEnemy ? enemy : player} enemy={isEnemy ? player : enemy} />
+                              ) : (
+                                <EmptyCell
+                                  col={col}
+                                  enemy={isEnemy}
+                                  highlighted={highlighted}
+                                  snipeTarget={snipeTarget}
+                                  frontEmpty={frontEmpty}
+                                />
+                              )}
+
+                              {deployFlash && <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"><div className="deploy-flash-ring" /></div>}
+
+                              {game.damagePopups.filter(popup => popup.key === key).map(popup => (
+                                <div key={popup.id} className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
+                                  <span className="damage-float text-2xl font-black text-rose-400 drop-shadow-lg">-{popup.amount}</span>
+                                </div>
+                              ))}
+
+                              {game.skillFloats.filter(float => float.key === key).map((float, index) => (
+                                <div
+                                  key={float.id}
+                                  className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center"
+                                  style={{ marginTop: `${index * 18}px` }}
+                                >
+                                  <span className={`skill-float text-base font-black drop-shadow-lg ${float.color}`}>{float.text}</span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <CommanderStatus
+              side="player"
+              player={player}
+              unitCount={playerUnitCount}
+              active={gameState.currentPlayer === 'player'}
+            />
+          </div>
+
+          <footer className="shrink-0 border-t border-white/10 bg-slate-950/90 px-2 py-1.5 backdrop-blur-xl sm:px-4">
+            <div className="mx-auto flex max-w-5xl items-center gap-2">
+              <div className={`hidden min-w-0 flex-1 items-center gap-2 rounded-xl border px-3 py-2 sm:flex ${
+                gameState.sniperMode ? 'border-purple-400/30 bg-purple-400/10' : selectedCard ? 'border-amber-400/25 bg-amber-400/10' : 'border-white/5 bg-white/[0.025]'
+              }`}>
+                {gameState.sniperMode ? <Crosshair className="h-4 w-4 shrink-0 text-purple-300" /> : selectedCard ? <Target className="h-4 w-4 shrink-0 text-amber-300" /> : <Flag className="h-4 w-4 shrink-0 text-slate-600" />}
+                <div className="min-w-0">
+                  <div className="truncate text-[10px] font-black text-slate-200">{instruction}</div>
+                  <div className="mt-0.5 text-[8px] text-slate-600">{phaseLabel} · 场上 {playerUnitCount} 个我方单位</div>
                 </div>
               </div>
-            );
-          })}
-        </div>
 
-        {/* 我方状态 */}
-        <div className="flex items-center gap-1.5 sm:gap-3 px-1.5 sm:px-2 py-0.5 bg-blue-950/30 rounded border border-blue-900/20 shrink-0 overflow-x-auto scrollbar-hide">
-          <span className="text-[10px] text-blue-400 font-bold">😎 玩家</span>
-          <div className="flex items-center gap-0.5">
-            <Heart className="w-3 h-3 text-red-500 fill-red-500" />
-            <div className="w-12 h-2 bg-gray-800 rounded-full overflow-hidden">
-              <div className={`h-full ${getHpColor(playerHpPct)}`} style={{ width: `${playerHpPct}%` }} />
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isDisabled) game.handleSurrender();
+                }}
+                disabled={isDisabled}
+                className="battle-command-secondary"
+              >
+                认输
+              </button>
+              <button
+                type="button"
+                onClick={() => setLogOpen(value => !value)}
+                className="battle-command-secondary sm:hidden"
+                aria-label="打开战报"
+              >
+                <ScrollText className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!canEndTurn) return;
+                  game.handleEndTurn(() => undefined);
+                }}
+                disabled={!canEndTurn}
+                className={`battle-command-primary ${canEndTurn ? '' : 'cursor-not-allowed opacity-40 grayscale'}`}
+              >
+                <div className="text-left">
+                  <div className="flex items-center gap-1.5 text-xs font-black sm:text-sm">
+                    {gameState.sniperMode ? <Crosshair className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    {gameState.sniperMode ? '选择狙击目标' : game.animating ? '战斗结算中' : '结束部署'}
+                  </div>
+                  <div className="mt-0.5 hidden text-[8px] font-bold text-amber-100/55 sm:block">
+                    {gameState.sniperMode ? '点击敌方发光目标' : `命令 ${playerUnitCount} 个单位开始攻击`}
+                  </div>
+                </div>
+              </button>
             </div>
-            <span className="text-[9px] text-gray-200 font-bold">{Math.max(0, p.hp)}</span>
-          </div>
-          {p.hqArmor > 0 && <span className="text-[8px] text-blue-400"><Shield className="w-2.5 h-2.5 inline" />{p.hqArmor}</span>}
-          {/* 金币放在HP旁边 */}
-          <div className="flex items-center gap-0.5 px-1.5 py-px bg-yellow-900/30 rounded border border-yellow-700/20">
-            <Coins className="w-3 h-3 text-yellow-400" />
-            <span className="text-[10px] text-yellow-400 font-bold">{p.gold}</span>
-            <span className="text-[8px] text-yellow-600">/{p.maxGold}</span>
-          </div>
-          <div className="flex items-center gap-0.5">
-            <Library className="w-2.5 h-2.5 text-gray-500" />
-            <span className="text-[8px] text-gray-400">{p.deck.length}</span>
-          </div>
-          <div className="flex-1" />
-          <span className="text-[9px] text-gray-500">💡 选中手牌后点击战场格子部署</span>
-        </div>
+          </footer>
 
-        {/* 按钮 */}
-        <div className="flex items-center justify-center gap-1.5 sm:gap-2 py-0.5 shrink-0">
-          <button onClick={() => {
-              // P0: 确认后才发送 surrender；非自己回合禁止操作
-              if (isDisabled) return;
-              const confirmed = game.handleSurrender();
-              if (confirmed) { /* 本地逻辑已处理 */ }
-            }}
-            disabled={isDisabled}
-            className={`px-2 sm:px-3 py-0.5 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded text-gray-400 text-[10px] sm:text-xs font-bold transition-colors cursor-pointer ${isDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}>
-            🏳️认输
-          </button>
-          <button onClick={() => {
-              // P0: 狙击模式下禁止结束回合；非自己回合禁止
-              if (gameState.sniperMode || isDisabled) return;
-              // P0: 攻击完成后再发 end_turn，避免竞态
-              game.handleEndTurn(() => {
-                /* end_turn 回调 */
-              });
-            }}
-            disabled={isDisabled || gameState.currentPlayer !== 'player' || gameState.sniperMode || game.animating}
-            className={`px-3 sm:px-5 py-0.5 rounded text-[10px] sm:text-xs font-bold transition-all flex items-center gap-1 cursor-pointer
-              ${!isDisabled && gameState.currentPlayer === 'player' && !gameState.sniperMode && !game.animating
-                ? 'bg-gradient-to-r from-red-700 to-red-600 hover:from-red-600 hover:to-red-500 text-white shadow-lg'
-                : 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-60'}`}>
-            <ChevronRight className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-            {gameState.sniperMode ? '选择目标' : game.animating ? (multiplayer ? '战斗中...' : 'AI中...') : '结束回合'}
-          </button>
-          <button onClick={() => setLogOpen(!logOpen)}
-            className="px-1.5 sm:px-2 py-0.5 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded text-gray-400 text-[10px] sm:text-xs font-bold cursor-pointer flex items-center gap-1">
-            <ScrollText className="w-2.5 h-2.5 sm:w-3 sm:h-3" />日志
-          </button>
-        </div>
-
-        {/* 日志 */}
-        {logOpen && (
-          <div className="h-10 sm:h-14 bg-black/70 border-t border-yellow-900/20 overflow-hidden shrink-0">
-            <div className="h-full overflow-y-auto p-1 space-y-0.5 scrollbar-thin">
-              {gameState.log.slice(-15).map(log => (
-                <div key={log.id} className={`text-[9px] leading-tight ${getLogColor(log.type)}`}>• {log.msg}</div>
-              ))}
+          {logOpen && (
+            <div className="absolute bottom-[72px] right-2 z-50 flex max-h-[55%] w-[min(92%,420px)] flex-col overflow-hidden rounded-xl border border-white/10 bg-slate-950/95 shadow-2xl shadow-black/60 backdrop-blur-xl sm:right-4">
+              <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-amber-200">
+                  <ScrollText className="h-3.5 w-3.5" /> 战斗战报
+                </div>
+                <button type="button" onClick={() => setLogOpen(false)} className="rounded p-1 text-slate-500 hover:bg-white/5 hover:text-white" aria-label="关闭战报">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="scrollbar-thin flex-1 space-y-1 overflow-y-auto p-3">
+                {gameState.log.slice(-30).reverse().map(log => (
+                  <div key={log.id} className={`rounded-md border border-white/5 bg-white/[0.025] px-2 py-1.5 text-[9px] leading-4 ${getLogColor(log.type)}`}>
+                    {log.msg}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </main>
       </div>
     </div>
   );
 }
 
-/* ==================== 子组件 ==================== */
+function CommanderStatus({
+  side,
+  player,
+  unitCount,
+  active,
+}: {
+  side: 'player' | 'enemy';
+  player: PlayerState;
+  unitCount: number;
+  active: boolean;
+}) {
+  const enemy = side === 'enemy';
+  const hpPct = Math.max(0, player.hp / player.maxHp * 100);
 
-function HQCell({ hp, maxHp, armor, isEnemy }: { hp: number; maxHp: number; armor: number; isEnemy: boolean }) {
+  return (
+    <div className={`mx-auto flex w-full max-w-[760px] shrink-0 items-center gap-1.5 rounded-xl border px-2 py-1 sm:px-2.5 ${
+      enemy ? 'border-rose-500/15 bg-rose-950/25' : 'border-blue-500/15 bg-blue-950/25'
+    } ${active ? (enemy ? 'shadow-[0_0_20px_rgba(244,63,94,.08)]' : 'shadow-[0_0_20px_rgba(59,130,246,.1)]') : ''}`}>
+      <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border ${
+        enemy ? 'border-rose-400/25 bg-rose-400/10 text-rose-300' : 'border-blue-400/25 bg-blue-400/10 text-blue-300'
+      }`}>
+        {enemy ? <Crown className="h-3.5 w-3.5" /> : <Flag className="h-3.5 w-3.5" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <span className={`text-[9px] font-black uppercase tracking-[0.14em] ${enemy ? 'text-rose-300' : 'text-blue-300'}`}>
+              {enemy ? '敌方指挥部' : '我方指挥部'}
+            </span>
+            {active && <span className={`h-1.5 w-1.5 rounded-full ${enemy ? 'bg-rose-400' : 'bg-blue-400'} animate-pulse`} />}
+          </div>
+          <span className="text-[8px] font-bold text-slate-600">{unitCount} 个单位</span>
+        </div>
+        <div className="mt-1 flex items-center gap-2">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
+            <div className={`h-full rounded-full ${getHpColor(hpPct)}`} style={{ width: `${hpPct}%` }} />
+          </div>
+          <span className="w-10 text-right text-[10px] font-black text-white">{Math.max(0, player.hp)}/{player.maxHp}</span>
+        </div>
+      </div>
+      <StatusChip icon={<Coins className="h-3 w-3" />} value={`${player.gold}`} tone="amber" />
+      <StatusChip icon={<Hand className="h-3 w-3" />} value={`${player.hand.length}`} tone="purple" />
+      <StatusChip icon={<Library className="h-3 w-3" />} value={`${player.deck.length}`} tone="slate" />
+      {player.hqArmor > 0 && <StatusChip icon={<Shield className="h-3 w-3" />} value={`${player.hqArmor}`} tone="blue" />}
+    </div>
+  );
+}
+
+function StatusChip({ icon, value, tone }: { icon: React.ReactNode; value: string; tone: 'amber' | 'purple' | 'slate' | 'blue' }) {
+  const styles = {
+    amber: 'border-amber-400/20 bg-amber-400/10 text-amber-300',
+    purple: 'border-purple-400/20 bg-purple-400/10 text-purple-300',
+    slate: 'border-white/10 bg-white/5 text-slate-400',
+    blue: 'border-blue-400/20 bg-blue-400/10 text-blue-300',
+  };
+  return <span className={`flex items-center gap-1 rounded-md border px-1.5 py-1 text-[9px] font-black ${styles[tone]}`}>{icon}{value}</span>;
+}
+
+function CellActionLabel({ tone, text }: { tone: 'attack' | 'defend'; text: string }) {
+  return (
+    <div className={`absolute left-1/2 top-1 z-30 -translate-x-1/2 rounded-full border px-2 py-0.5 text-[7px] font-black ${
+      tone === 'attack' ? 'border-amber-300/50 bg-amber-500/90 text-slate-950' : 'border-rose-300/50 bg-rose-600/90 text-white'
+    }`}>
+      {text}
+    </div>
+  );
+}
+
+function EmptyCell({
+  col,
+  enemy,
+  highlighted,
+  snipeTarget,
+  frontEmpty,
+}: {
+  col: number;
+  enemy: boolean;
+  highlighted: boolean;
+  snipeTarget: boolean;
+  frontEmpty: boolean;
+}) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-1 text-center">
+      {highlighted || snipeTarget ? (
+        <>
+          {snipeTarget ? <Crosshair className="h-5 w-5 animate-pulse text-purple-300" /> : <Zap className="h-5 w-5 animate-pulse text-amber-300" />}
+          <span className={`text-[8px] font-black ${snipeTarget ? 'text-purple-200' : 'text-amber-200'}`}>
+            {snipeTarget ? '可选择目标' : enemy ? '可选目标' : '点击部署'}
+          </span>
+        </>
+      ) : (
+        <>
+          <span className={`h-1.5 w-1.5 rounded-full ${enemy ? 'bg-rose-400/20' : 'bg-blue-400/20'}`} />
+          <span className="text-[8px] font-bold text-slate-700">{['左翼', '中路', '右翼'][col]}</span>
+          {frontEmpty && <span className="text-[7px] text-rose-400/40">空线</span>}
+        </>
+      )}
+    </div>
+  );
+}
+
+function HQCell({ hp, maxHp, armor, bleed, poison, enemy }: { hp: number; maxHp: number; armor: number; bleed: number; poison: number; enemy: boolean }) {
   const pct = Math.max(0, hp / maxHp * 100);
   return (
-    <div className="flex flex-col items-center gap-px w-full px-1">
-      <span className={`text-[9px] font-bold ${isEnemy ? 'text-red-300' : 'text-blue-300'}`} style={{ fontFamily: "'Cinzel', serif" }}>
-        🏛️{isEnemy ? '敌' : '我'}HQ
-      </span>
-      <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden border border-gray-700">
-        <div className={`h-full ${getHpColor(pct)}`} style={{ width: `${pct}%` }} />
+    <div className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden p-2">
+      <div className={`absolute inset-0 opacity-25 ${enemy ? 'bg-gradient-to-br from-rose-600 to-purple-900' : 'bg-gradient-to-br from-blue-600 to-purple-900'}`} />
+      <div className={`relative flex h-8 w-8 items-center justify-center rounded-full border sm:h-10 sm:w-10 ${
+        enemy ? 'border-rose-300/35 bg-rose-400/10 text-rose-200' : 'border-blue-300/35 bg-blue-400/10 text-blue-200'
+      }`}>
+        <Flag className="h-4 w-4 sm:h-5 sm:w-5" />
       </div>
-      <div className="flex items-center gap-1">
-        <span className="text-[9px] text-gray-200 font-bold">{Math.max(0, hp)}</span>
-        {armor > 0 && <span className="text-[8px] text-blue-400"><Shield className="w-2.5 h-2.5 inline" />{armor}</span>}
+      <div className="relative mt-1 text-[9px] font-black text-white sm:text-[10px]">{enemy ? '敌方 HQ' : '我方 HQ'}</div>
+      <div className="relative mt-1 flex items-center gap-1.5">
+        <span className="flex items-center gap-0.5 text-[10px] font-black text-emerald-300"><Heart className="h-3 w-3" />{Math.max(0, hp)}</span>
+        {armor > 0 && <span className="flex items-center gap-0.5 text-[9px] font-black text-blue-300"><Shield className="h-3 w-3" />{armor}</span>}
+      </div>
+      {(bleed > 0 || poison > 0) && (
+        <div className="relative mt-1 flex gap-1">
+          {bleed > 0 && <StatusBadge label={`流血${bleed}`} />}
+          {poison > 0 && <StatusBadge label={`毒${poison}`} />}
+        </div>
+      )}
+      <div className="relative mt-1 h-1 w-full max-w-24 overflow-hidden rounded-full bg-black/40">
+        <div className={`h-full rounded-full ${getHpColor(pct)}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
 }
 
 function UnitCell({ unit, owner, enemy }: { unit: Unit; owner: PlayerState; enemy: PlayerState }) {
-  const qStyle = getQualityStyle(unit.quality);
+  const quality = getQualityStyle(unit.quality);
   const hpPct = Math.max(0, unit.hp / unit.maxHp * 100);
-  const skillLabels = parseSkillLabels(unit.skills as Skill[], unit.desc);
+  const labels = parseSkillLabels(unit.skills as Skill[], unit.desc);
+  const art = getFactionArt(unit.faction);
+  const factionAccent = getFactionAccent(unit.faction);
+  const hasDebuff = unit.bleed > 0 || unit.poison > 0 || unit.silenceTurns > 0 || unit.frozen || unit.frozenTurns > 0;
 
-  // 计算debuff
-  const hasDebuff = unit.bleed > 0 || unit.poison > 0 || unit.silenceTurns > 0;
-
-  // 计算光环加成（战术指挥/射击指挥）
-  const unitSubtype = unit.subtype as string;
   let atkBonus = 0;
-  for (const u of Object.values(owner.board)) {
-    if (u.skills.includes('tacticCmd') && unitSubtype === '近战') {
-      const m = u.desc.match(/战术指挥(\d+)/);
-      atkBonus += m ? parseInt(m[1], 10) : 1;
+  for (const ally of Object.values(owner.board)) {
+    if (ally.skills.includes('tacticCmd') && unit.subtype === '近战') {
+      const match = ally.desc.match(/战术指挥(\d+)/);
+      atkBonus += match ? Number.parseInt(match[1], 10) : 1;
     }
-    if (u.skills.includes('shootCmd') && unitSubtype === '弓箭') {
-      const m = u.desc.match(/射击指挥(\d+)/);
-      atkBonus += m ? parseInt(m[1], 10) : 1;
-    }
-  }
-  // 增益buff（魔力增幅等）
-  for (const buff of unit.buffs) {
-    if (buff.type === 'atk') atkBonus += buff.value;
-  }
-  // 中毒时战术指挥/射击指挥失效，但buff加成仍有效
-  if (unit.poison > 0) {
-    atkBonus = 0;
-    for (const buff of unit.buffs) {
-      if (buff.type === 'atk') atkBonus += buff.value;
+    if (ally.skills.includes('shootCmd') && unit.subtype === '弓箭') {
+      const match = ally.desc.match(/射击指挥(\d+)/);
+      atkBonus += match ? Number.parseInt(match[1], 10) : 1;
     }
   }
+  for (const buff of unit.buffs) if (buff.type === 'atk') atkBonus += buff.value;
+  if (unit.poison > 0) atkBonus = unit.buffs.filter(buff => buff.type === 'atk').reduce((sum, buff) => sum + buff.value, 0);
 
-  // 计算叱吓减攻（敌方叱吓降低我方物理单位攻击力）
   let atkDebuff = 0;
-  if (unitSubtype === '近战' || unitSubtype === '弓箭' || unitSubtype === '狙击') {
-    for (const u of Object.values(enemy.board)) {
-      if (u.skills.includes('intimidate')) {
-        const m = u.desc.match(/叱吓(\d+)/);
-        atkDebuff += m ? parseInt(m[1], 10) : 2;
+  if (unit.subtype === '近战' || unit.subtype === '弓箭' || unit.subtype === '狙击') {
+    for (const opposingUnit of Object.values(enemy.board)) {
+      if (opposingUnit.skills.includes('intimidate')) {
+        const match = opposingUnit.desc.match(/叱吓(\d+)/);
+        atkDebuff += match ? Number.parseInt(match[1], 10) : 2;
       }
     }
   }
 
-  // 敌方是否有干扰（只影响狙击单位）
-  const isSniper = unit.subtype === '狙击';
-  const hasEnemyJamming = isSniper && Object.values(enemy.board).some(u => u.skills.includes('jamming'));
-
-  // 构建攻击力显示文本
-  const atkParts: string[] = [];
-  if (atkBonus > 0) atkParts.push(`+${atkBonus}`);
-  if (atkDebuff > 0) atkParts.push(`-${atkDebuff}`);
+  const jammed = unit.subtype === '狙击' && Object.values(enemy.board).some(opposingUnit => opposingUnit.skills.includes('jamming'));
 
   return (
-    <div className={`relative w-full h-full flex flex-col items-center justify-between py-px px-0.5 rounded-sm ${qStyle.bg} border ${qStyle.border} ${unit.frozen ? 'opacity-50' : ''}`}>
-      {/* 干扰图标：敌方有干扰且本单位是狙击时显示 */}
-      {hasEnemyJamming && (
-        <div className="absolute -top-1.5 -left-1.5 z-20 px-1 py-px bg-red-700 rounded-[2px] flex items-center justify-center text-[7px] font-bold text-red-200 shadow border border-red-500 whitespace-nowrap leading-none">
-          干扰中
-        </div>
-      )}
-      {skillLabels.length > 0 && (
-        <div className="absolute top-0 left-0 right-0 flex gap-0.5 justify-center flex-wrap px-0.5 z-10">
-          {skillLabels.map((label, i) => (
-            <span key={i} className={`relative px-0.5 rounded-[1px] text-[7px] leading-none whitespace-nowrap font-bold overflow-hidden ${unit.silenceTurns > 0 ? 'bg-red-900/60 text-red-300/50' : 'bg-black/60 text-yellow-300'}`}>
-              {unit.silenceTurns > 0 && (
-                <span className="absolute inset-0 flex items-center justify-center text-[8px] text-red-500 font-black z-10">❌</span>
-              )}
-              <span className={unit.silenceTurns > 0 ? 'line-through opacity-40' : ''}>{label}</span>
-            </span>
-          ))}
-        </div>
-      )}
-      {/* 右上角品质标识 */}
-      <div className={`absolute top-0 right-0 text-[6px] px-px ${qStyle.text} font-bold opacity-70`}>{unit.quality}</div>
+    <div className={`relative h-full w-full overflow-hidden rounded-md border ${quality.border} ${unit.frozen ? 'opacity-50' : ''}`} style={{ boxShadow: `inset 0 0 0 1px ${factionAccent}33` }}>
+      <img src={art} alt="" className="absolute inset-0 h-full w-full object-cover opacity-35" />
+      <div className="absolute inset-0 bg-gradient-to-b from-slate-950/25 via-slate-950/55 to-slate-950/95" />
+      <div className="absolute left-0 top-0 h-full w-0.5" style={{ background: factionAccent }} />
 
-      <div className="mt-2.5 text-center w-full">
-        <div className={`text-[9px] font-bold leading-tight ${qStyle.text} truncate`}>{unit.name}</div>
-        <div className="text-[7px] text-gray-400">{unit.subtype}</div>
-      </div>
-
-      {/* Debuff显示条 */}
-      {hasDebuff && (
-        <div className="w-full flex gap-px justify-center mb-px">
-          {unit.bleed > 0 && (
-            <span className="flex items-center gap-px px-1 bg-red-900/80 rounded-[2px] text-[8px] text-red-300 leading-none font-bold border border-red-700/60">
-              <Droplets className="w-2 h-2" />{unit.bleed}
-            </span>
-          )}
-          {unit.poison > 0 && (
-            <span className="flex items-center gap-px px-1 bg-green-900/80 rounded-[2px] text-[8px] text-green-300 leading-none font-bold border border-green-700/60">
-              <Skull className="w-2 h-2" />{unit.poison}
-            </span>
-          )}
-          {unit.silenceTurns > 0 && (
-            <span className="flex items-center gap-px px-1 bg-gray-700/90 rounded-[2px] text-[8px] text-gray-300 leading-none font-bold border border-gray-500/60">
-              <VolumeX className="w-2 h-2 text-red-400" />{unit.silenceTurns}
-            </span>
-          )}
+      <div className="relative flex h-full flex-col p-1.5">
+        <div className="flex min-h-4 items-start justify-between gap-1">
+          <div className="flex min-w-0 flex-wrap gap-0.5">
+            {labels.slice(0, 2).map(label => (
+              <span key={label} className={`rounded-sm border border-white/10 bg-black/60 px-1 py-0.5 text-[6px] font-black leading-none sm:text-[7px] ${
+                unit.silenceTurns > 0 ? 'text-rose-300 line-through opacity-60' : 'text-amber-200'
+              }`}>
+                {label}
+              </span>
+            ))}
+          </div>
+          <span className={`shrink-0 text-[6px] font-black sm:text-[7px] ${quality.text}`}>{unit.quality}</span>
         </div>
-      )}
 
-      <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden">
-        <div className={`h-full ${getHpColor(hpPct)}`} style={{ width: `${hpPct}%` }} />
-      </div>
-      <div className="flex items-center gap-1">
-        {atkParts.length > 0 ? (
-          <span className="flex items-center gap-px text-[9px] font-bold text-red-400">
-            <Swords className="w-2.5 h-2.5" />{unit.atk}
-            <span className="text-[7px]">
-              ({atkParts.join(' ')})
-            </span>
-          </span>
-        ) : (
-          <span className="flex items-center gap-px text-[9px] font-bold text-red-400"><Swords className="w-2.5 h-2.5" />{unit.atk}</span>
-        )}
-        <span className="flex items-center gap-px text-[9px] font-bold text-emerald-400"><Heart className="w-2.5 h-2.5" />{unit.hp}</span>
-        {unit.armor > 0 && <span className="flex items-center gap-px text-[9px] font-bold text-blue-400"><Shield className="w-2.5 h-2.5" />{unit.armor}</span>}
+        <div className="mt-auto">
+          {jammed && <span className="mb-1 inline-flex rounded bg-rose-600/80 px-1 text-[6px] font-black text-white">干扰</span>}
+          <div className={`truncate text-[9px] font-black text-white drop-shadow-lg sm:text-[11px]`}>{unit.name}</div>
+          <div className="mt-0.5 text-[6px] font-bold uppercase tracking-wider text-slate-400 sm:text-[7px]">{unit.subtype} · {unit.faction.replace('军团', '').replace('学院', '')}</div>
+
+          {hasDebuff && (
+            <div className="mt-1 flex flex-wrap gap-0.5">
+              {unit.bleed > 0 && <StatusBadge label={`流血${unit.bleed}`} />}
+              {unit.poison > 0 && <StatusBadge label={`毒${unit.poison}`} />}
+              {unit.silenceTurns > 0 && <StatusBadge label={`沉默${unit.silenceTurns}`} />}
+              {(unit.frozen || unit.frozenTurns > 0) && <StatusBadge label={`冻结${Math.max(1, unit.frozenTurns)}`} />}
+            </div>
+          )}
+
+          <div className="mt-1 h-1 overflow-hidden rounded-full bg-black/50">
+            <div className={`h-full rounded-full ${getHpColor(hpPct)}`} style={{ width: `${hpPct}%` }} />
+          </div>
+          <div className="mt-1 flex items-center gap-1">
+            <StatBadge icon={<Swords className="h-2.5 w-2.5" />} value={`${unit.atk}${atkBonus ? `+${atkBonus}` : ''}${atkDebuff ? `-${atkDebuff}` : ''}`} tone="rose" />
+            <StatBadge icon={<Heart className="h-2.5 w-2.5" />} value={`${unit.hp}`} tone="green" />
+            {unit.armor > 0 && <StatBadge icon={<Shield className="h-2.5 w-2.5" />} value={`${unit.armor}`} tone="blue" />}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-/* ======== 大手牌卡片（左侧竖排） ======== */
-function HandCardLarge({
+function StatBadge({ icon, value, tone }: { icon: React.ReactNode; value: string; tone: 'rose' | 'green' | 'blue' }) {
+  const style = {
+    rose: 'bg-rose-500/20 text-rose-200',
+    green: 'bg-emerald-500/20 text-emerald-200',
+    blue: 'bg-blue-500/20 text-blue-200',
+  };
+  return <span className={`flex items-center gap-0.5 rounded px-1 py-0.5 text-[7px] font-black sm:text-[8px] ${style[tone]}`}>{icon}{value}</span>;
+}
+
+function StatusBadge({ label }: { label: string }) {
+  return (
+    <span className="rounded border border-rose-400/35 bg-rose-950/75 px-1 py-0.5 text-[6px] font-black text-rose-300 shadow-[0_0_8px_rgba(244,63,94,.18)]">
+      {label}
+    </span>
+  );
+}
+
+function HandCard({
   card,
   cost,
   affordable,
-  isSelected,
-  qStyle,
+  selected,
+  disabled,
   onClick,
 }: {
-  card: { name: string; cost: number; quality: string; type: string; subtype: string; atk: number; hp: number; desc: string; skills: string[] };
-  cost: number; affordable: boolean; isSelected: boolean;
-  qStyle: { bg: string; border: string; text: string; glow: string };
+  card: CardDef;
+  cost: number;
+  affordable: boolean;
+  selected: boolean;
+  disabled: boolean;
   onClick: () => void;
 }) {
-  // 解析技能标签
-  const skillLabels = parseSkillLabels(card.skills as Skill[], card.desc);
+  const quality = getQualityStyle(card.quality);
+  const labels = parseSkillLabels(card.skills, card.desc);
+  const art = getFactionArt(card.faction);
+  const accent = getFactionAccent(card.faction);
+  const unavailable = !affordable || disabled;
 
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`
-        relative w-full rounded-lg border-2 transition-all duration-150 cursor-pointer
-        flex flex-col items-center overflow-hidden
-        ${qStyle.bg} ${qStyle.border}
-        ${isSelected ? 'scale-[1.02] shadow-lg shadow-yellow-500/25 border-yellow-400 z-10' : 'hover:brightness-110'}
-        ${!affordable ? 'opacity-45 grayscale' : ''}
-      `}
-      style={{ minHeight: '108px' }}
+      className={`group relative min-h-[116px] w-full overflow-hidden rounded-xl border-2 text-left transition-all duration-200 sm:min-h-[136px] ${
+        selected ? 'translate-x-1 border-amber-300 shadow-[0_0_24px_rgba(251,191,36,.28)]' : `${quality.border} hover:translate-x-0.5 hover:brightness-110`
+      } ${unavailable ? 'opacity-45 grayscale' : ''}`}
     >
-      {/* 费用圆圈 */}
-      <div className="absolute top-1 left-1 w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow">
-        {cost}
-      </div>
-      {/* 品质星星 */}
-      <div className="absolute top-1 right-1 text-[8px] text-yellow-400">
-        {card.quality === '铜' ? '★' : card.quality === '银' ? '★★' : card.quality === '金' ? '★★★' : '★★★★'}
-      </div>
+      <img src={art} alt="" className="absolute inset-0 h-full w-full object-cover opacity-45 transition duration-300 group-hover:scale-105" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/15 via-slate-950/45 to-slate-950/95" />
+      <div className="absolute left-0 top-0 h-full w-1" style={{ background: accent }} />
+      {selected && <div className="absolute inset-0 bg-amber-300/5" />}
 
-      {/* 卡牌名称 */}
-      <div className="mt-5 text-center w-full px-1">
-        <div className={`text-[11px] font-bold leading-tight ${qStyle.text} truncate`}>{card.name}</div>
-        <div className="text-[8px] text-gray-400">{card.subtype} {card.type}</div>
-      </div>
-
-      {/* 技能标签 */}
-      {skillLabels.length > 0 && (
-        <div className="flex gap-0.5 justify-center flex-wrap px-1 mt-0.5">
-          {skillLabels.map((label, i) => (
-            <span key={i} className="px-1 bg-black/50 rounded text-[8px] text-yellow-300 font-bold whitespace-nowrap">
-              {label}
-            </span>
-          ))}
+      <div className="relative flex h-full min-h-[116px] flex-col p-2 sm:min-h-[136px]">
+        <div className="flex items-start justify-between gap-1">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-blue-300/40 bg-blue-600/90 text-[11px] font-black text-white shadow-lg">{cost}</span>
+          <span className={`rounded-full border border-white/10 bg-black/60 px-1.5 py-0.5 text-[7px] font-black ${quality.text}`}>{card.quality}</span>
         </div>
-      )}
 
-      {/* 描述 */}
-      <div className="text-[8px] text-gray-400 text-center px-1 mt-0.5 line-clamp-2 leading-tight flex-1 flex items-center justify-center">
-        {card.desc}
+        <div className="mt-auto">
+          <div className="truncate text-[10px] font-black text-white drop-shadow-lg sm:text-xs">{card.name}</div>
+          <div className="mt-0.5 text-[7px] font-bold text-slate-400 sm:text-[8px]">{card.subtype} · {card.type}</div>
+          <div className="mt-1 flex flex-wrap gap-0.5">
+            {labels.slice(0, 3).map(label => (
+              <span key={label} className="rounded border border-amber-400/15 bg-black/55 px-1 py-0.5 text-[6px] font-bold text-amber-200 sm:text-[7px]">{label}</span>
+            ))}
+          </div>
+          <div className="mt-1.5 flex items-center gap-1">
+            {card.type === '士兵' ? (
+              <>
+                <StatBadge icon={<Swords className="h-2.5 w-2.5" />} value={`${card.atk}`} tone="rose" />
+                <StatBadge icon={<Heart className="h-2.5 w-2.5" />} value={`${card.hp}`} tone="green" />
+                {card.armor > 0 && <StatBadge icon={<Shield className="h-2.5 w-2.5" />} value={`${card.armor}`} tone="blue" />}
+              </>
+            ) : (
+              <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-[7px] font-black text-purple-200">法术效果</span>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* 攻防数值 */}
-      {card.type === '士兵' && (
-        <div className="flex items-center gap-2 mt-0.5 mb-1">
-          <span className="flex items-center gap-0.5 text-[10px] font-bold text-red-400"><Swords className="w-3 h-3" />{card.atk}</span>
-          <span className="flex items-center gap-0.5 text-[10px] font-bold text-emerald-400"><Heart className="w-3 h-3" />{card.hp}</span>
+      {!affordable && (
+        <div className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 items-center justify-center">
+          <span className="flex items-center gap-1 rounded-full border border-rose-400/30 bg-black/80 px-2 py-1 text-[7px] font-black text-rose-200">
+            <AlertTriangle className="h-2.5 w-2.5" /> 金币不足
+          </span>
         </div>
       )}
     </button>
@@ -632,10 +819,10 @@ function HandCardLarge({
 function getLogColor(type: string): string {
   switch (type) {
     case 'player': return 'text-blue-300';
-    case 'enemy': return 'text-red-300';
-    case 'damage': return 'text-orange-400';
-    case 'heal': return 'text-emerald-400';
-    case 'gold': return 'text-yellow-400';
-    default: return 'text-gray-400';
+    case 'enemy': return 'text-rose-300';
+    case 'damage': return 'text-orange-300';
+    case 'heal': return 'text-emerald-300';
+    case 'gold': return 'text-amber-300';
+    default: return 'text-slate-400';
   }
 }

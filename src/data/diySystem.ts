@@ -315,7 +315,7 @@ export function checkConflicts(selectedSkills: string[]): ConflictRule[] {
   for (const rule of CONFLICT_RULES) {
     if (rule.requires) continue; // 依赖规则单独处理
 
-    const key = rule.skills.sort().join('|');
+    const key = [...rule.skills].sort().join('|');
     if (checked.has(key)) continue;
 
     const hasAll = rule.skills.every(s =>
@@ -659,23 +659,21 @@ export function validateDeck(
 
     if (entry.isDIY) {
       counts.diy++;
+      if (diyCards && !diyCards.some(c => c.id === id)) {
+        errors.push(`卡组引用了不存在的DIY卡: ${id}`);
+      }
       // P1-08: DIY卡单独计数，不增加彩虹计数
       // DIY卡的品质固定为'彩'，但独立配额
     } else {
       const card = allOfficialCards.find(c => String(c.id) === id);
       if (card) {
-        // P1-07: 检查引用的DIY卡是否存在
-        if (diyCards && entry.isDIY) {
-          const exists = diyCards.some(c => c.id === id);
-          if (!exists) {
-            errors.push(`卡组引用了不存在的DIY卡: ${id}`);
-          }
-        }
         const rarityMap: Record<string, keyof typeof counts> = {
           '铜': 'copper', '银': 'silver', '金': 'gold', '彩': 'rainbow',
         };
         const key = rarityMap[card.quality];
         if (key) counts[key]++;
+      } else {
+        errors.push(`卡组引用了不存在的官方卡牌: ${id}`);
       }
     }
   }
@@ -840,7 +838,13 @@ export function importGameDataFromFile(file: File): Promise<{ success: boolean; 
 }
 
 /** 数据版本迁移 */
-function migrateData(data: any): { success: boolean; message: string } {
+interface MigratableGameData {
+  version?: string;
+  diyCards?: Array<{ damageType?: DamageType; id: string | number }>;
+  deck?: Array<{ cardId: string | number }>;
+}
+
+function migrateData(data: MigratableGameData): { success: boolean; message: string } {
   // v0.x → v1.0 迁移
   if (!data.version || data.version < '1.0') {
     // 迁移DIY卡：添加damageType字段（如果缺失）

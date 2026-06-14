@@ -4,7 +4,7 @@ import { ALL_CARDS } from '@/data/cards';
 import type { CardDef } from '@/data/cards';
 import { loadDIYCards } from '@/data/diySystem';
 import type { DIYCard } from '@/data/diySystem';
-import { SKILL_NAMES } from '@/types/game';
+import { getVisibleSkillLabels } from '@/utils/skillLabels';
 
 interface Props {
   onBack: () => void;
@@ -64,10 +64,7 @@ export default function CardGallery({ onBack }: Props) {
       if (search) {
         const q = search.toLowerCase();
         const nameMatch = card.name.toLowerCase().includes(q);
-        const skillMatch = card.skills.some(s => {
-          const sn = SKILL_NAMES[s as keyof typeof SKILL_NAMES] || s;
-          return sn.toLowerCase().includes(q) || s.toLowerCase().includes(q);
-        });
+        const skillMatch = getVisibleSkillLabels(card.skills, card.desc).some(skill => skill.toLowerCase().includes(q));
         if (!nameMatch && !skillMatch) return false;
       }
       return true;
@@ -81,10 +78,7 @@ export default function CardGallery({ onBack }: Props) {
       if (search) {
         const q = search.toLowerCase();
         const nameMatch = card.name.toLowerCase().includes(q);
-        const skillMatch = card.skills.some(s => {
-          const sn = SKILL_NAMES[s as keyof typeof SKILL_NAMES] || s;
-          return sn.toLowerCase().includes(q) || s.toLowerCase().includes(q);
-        });
+        const skillMatch = getVisibleSkillLabels(card.skills, card.desc).some(skill => skill.toLowerCase().includes(q));
         const descMatch = card.desc.toLowerCase().includes(q);
         if (!nameMatch && !skillMatch && !descMatch) return false;
       }
@@ -189,12 +183,9 @@ export default function CardGallery({ onBack }: Props) {
                     <span className="text-purple-400">法术</span>
                   )}
                 </div>
-                {card.skills.length > 0 && (
+                {getVisibleSkillLabels(card.skills, card.desc).length > 0 && (
                   <div className="text-[7px] text-gray-400 truncate mt-0.5">
-                    {card.skills.slice(0, 2).map((s, i) => {
-                      const sn = SKILL_NAMES[s as keyof typeof SKILL_NAMES] || s;
-                      return <span key={i}>{sn} </span>;
-                    })}
+                    {getVisibleSkillLabels(card.skills, card.desc, 2).map((skill, i) => <span key={i}>{skill} </span>)}
                   </div>
                 )}
                 {isDIY && (
@@ -277,15 +268,14 @@ export default function CardGallery({ onBack }: Props) {
               </div>
             )}
 
-            {detailCard.skills.length > 0 && (
+            {getVisibleSkillLabels(detailCard.skills, detailCard.desc).length > 0 && (
               <div className="space-y-1.5 mb-3">
                 <div className="text-xs text-gray-400 font-bold">技能</div>
-                {detailCard.skills.map((skill: string, i: number) => (
+                {getVisibleSkillLabels(detailCard.skills, detailCard.desc).map((skill: string, i: number) => (
                   <div key={i} className="bg-gray-800/60 rounded-lg p-2 flex items-start gap-2">
                     <Zap className="w-3 h-3 text-yellow-400 shrink-0 mt-0.5" />
                     <div>
-                      <span className="text-yellow-400 text-xs font-bold">{SKILL_NAMES[skill as keyof typeof SKILL_NAMES] || skill}</span>
-                      <span className="text-gray-500 text-[10px] ml-1">({skill})</span>
+                      <span className="text-yellow-400 text-xs font-bold">{skill}</span>
                     </div>
                   </div>
                 ))}

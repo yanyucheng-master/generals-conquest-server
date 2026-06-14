@@ -10,7 +10,7 @@ import GameBoard from '@/components/GameBoard';
 import GameOver from '@/components/GameOver';
 import GachaPage from '@/components/GachaPage';
 import DeckBuilder from '@/components/DeckBuilder';
-import { loadDeck, loadDIYCards, getDeckCards } from '@/data/diySystem';
+import { loadDeck, loadDIYCards, getDeckCards, validateDeck } from '@/data/diySystem';
 import { ALL_CARDS } from '@/data/cards';
 import type { CardDef } from '@/data/cards';
 import type { Faction } from '@/types/game';
@@ -82,6 +82,7 @@ function App() {
   const handleCustomSelect = useCallback(() => {
     const deck = loadDeck();
     const diyCards = loadDIYCards();
+    if (!validateDeck(deck, ALL_CARDS, diyCards).valid) return;
     const customCards = getDeckCards(deck, ALL_CARDS, diyCards) as CardDef[];
     game.startGame('empire', customCards, undefined);
     setMode('playing');

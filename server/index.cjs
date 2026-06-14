@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const PORT = process.env.PORT || process.env.WS_PORT || 3001;
 const ROOM_TTL_MS = 120000; // 房间保留120秒
 const MAX_RECONNECT_ATTEMPTS = 8;
+const VALID_FACTIONS = new Set(['empire', 'wild', 'arcane']);
 
 // ======== 房间管理 ========
 const rooms = new Map(); // roomId -> Room
@@ -38,6 +39,7 @@ function createRoom(hostId, hostDeckData) {
     guestRejoinToken: null,
     gameStarted: false,
     gameSeed: null,
+    activeRole: null,
     hostStateSnapshot: null,
     guestStateSnapshot: null,
     hostReady: false,
@@ -66,13 +68,20 @@ function destroyRoom(roomId) {
 function startRoomDestroyTimer(room) {
   if (room.disconnectTimer) clearTimeout(room.disconnectTimer);
   room.disconnectTimer = setTimeout(() => {
-    const stillOnline = (room.hostOnline && room.hostId) || (room.guestOnline && room.guestId);
-    if (!stillOnline) {
+    const hasDisconnectedPlayer = !room.hostOnline || !room.guestOnline;
+    if (room.gameStarted && hasDisconnectedPlayer) {
+      const onlineId = room.hostOnline ? room.hostId : room.guestOnline ? room.guestId : null;
+      if (onlineId) {
+        sendTo(onlineId, {
+          type: 'room_closed',
+          payload: { message: '对手未在120秒内重连，对局已结束' },
+        });
+      }
       destroyRoom(room.id);
-      console.log(`[ROOM] 房间 ${room.id} 因120秒无人重连已销毁`);
+      console.log(`[ROOM] 房间 ${room.id} 因玩家超时未重连已销毁`);
     }
   }, ROOM_TTL_MS);
-  console.log(`[ROOM] 房间 ${room.id} 将在 ${ROOM_TTL_MS / 1000} 秒后销毁（除非有人重连）`);
+  console.log(`[ROOM] 房间 ${room.id} 将在 ${ROOM_TTL_MS / 1000} 秒后检查断线玩家`);
 }
 
 // 清理过期房间（超过1小时且无人活跃）
@@ -100,23 +109,15 @@ const server = http.createServer((req, res) => {
   }
 
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  const roomList = Array.from(rooms.values()).map(r => ({
-    id: r.id,
-    hasGuest: !!r.guestId,
-    gameStarted: r.gameStarted,
-    hostOnline: r.hostOnline,
-    guestOnline: r.guestOnline,
-  }));
   res.end(JSON.stringify({
     status: 'ok',
     message: '《将领：征服》联机服务器运行中（支持断线重连）',
     port: PORT,
-    rooms: roomList.length,
-    roomList,
+    rooms: rooms.size,
   }));
 });
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ server, maxPayload: 1024 * 1024 });
 
 // 客户端连接映射 clientId -> { ws, roomId, role }
 const clients = new Map();
@@ -163,11 +164,14 @@ function getRole(room, clientId) {
 }
 
 // 校验消息合法性
-function validateGameAction(room, clientId) {
+function validateGameAction(room, clientId, requireActiveTurn = true) {
   if (!room) return { ok: false, error: '房间不存在' };
   const role = getRole(room, clientId);
   if (!role) return { ok: false, error: '你不是房间成员' };
   if (!room.gameStarted) return { ok: false, error: '游戏尚未开始' };
+  if (requireActiveTurn && room.activeRole !== role) {
+    return { ok: false, error: '当前不是你的回合' };
+  }
   return { ok: true, role };
 }
 
@@ -228,11 +232,19 @@ function handleMessage(clientId, ws, msg) {
         sendTo(clientId, { type: 'error', payload: { message: '房间不存在或已过期' } });
         return;
       }
+      if (room.gameStarted) {
+        sendTo(clientId, { type: 'error', payload: { message: '对局已经开始，无法加入' } });
+        return;
+      }
+      if (!room.hostOnline) {
+        sendTo(clientId, { type: 'error', payload: { message: '房主已离线，请创建新房间' } });
+        return;
+      }
       if (room.guestId && room.guestOnline) {
         sendTo(clientId, { type: 'error', payload: { message: '房间已满（最多2人）' } });
         return;
       }
-      // 客机离线时释放席位，允许新玩家加入
+      // 尚未开局时，客机离线可释放席位。
       if (room.guestId && !room.guestOnline) {
         clients.delete(room.guestId);
         room.guestId = null;
@@ -285,10 +297,12 @@ function handleMessage(clientId, ws, msg) {
       if (isHost) room.hostOnline = true;
       else room.guestOnline = true;
 
-      // 取消销毁定时器
-      if (room.disconnectTimer) {
+      // 双方均在线后取消超时销毁；否则继续等待另一方重连。
+      if (room.hostOnline && room.guestOnline && room.disconnectTimer) {
         clearTimeout(room.disconnectTimer);
         room.disconnectTimer = null;
+      } else if (room.gameStarted) {
+        startRoomDestroyTimer(room);
       }
 
       // 移除旧客户端
@@ -354,8 +368,17 @@ function handleMessage(clientId, ws, msg) {
       const { roomId, faction, deckData } = payload;
       const room = getRoom(roomId);
       if (!room) return;
+      if (!VALID_FACTIONS.has(faction)) {
+        sendTo(clientId, { type: 'error', payload: { message: '无效阵营' } });
+        return;
+      }
 
-      const isHost = room.hostId === clientId;
+      const role = getRole(room, clientId);
+      if (!role || room.gameStarted) {
+        sendTo(clientId, { type: 'error', payload: { message: '无法在当前房间选择阵营' } });
+        return;
+      }
+      const isHost = role === 'host';
       if (isHost) {
         room.hostFaction = faction;
         room.hostReady = true;
@@ -380,6 +403,7 @@ function handleMessage(clientId, ws, msg) {
         const seed = Math.floor(Math.random() * 1000000);
         room.gameStarted = true;
         room.gameSeed = seed;
+        room.activeRole = 'host';
         const shared = { roomId: room.id, seed };
         sendTo(room.hostId, {
           type: 'game_start',
@@ -419,6 +443,7 @@ function handleMessage(clientId, ws, msg) {
       const room = getRoom(client.roomId);
       if (!room || !room.gameStarted) return;
       const role = getRole(room, clientId);
+      if (!role) return;
       if (role === 'host') room.hostStateSnapshot = payload?.state || null;
       else if (role === 'guest') room.guestStateSnapshot = payload?.state || null;
       break;
@@ -435,7 +460,7 @@ function handleMessage(clientId, ws, msg) {
       const client = clients.get(clientId);
       if (!client || !client.roomId) return;
       const room = getRoom(client.roomId);
-      const v = validateGameAction(room, clientId);
+      const v = validateGameAction(room, clientId, type !== 'surrender');
       if (!v.ok) {
         sendTo(clientId, { type: 'error', payload: { message: v.error } });
         return;
@@ -443,8 +468,13 @@ function handleMessage(clientId, ws, msg) {
       if (type === 'game_over' || type === 'surrender') {
         room.hostStateSnapshot = null;
         room.guestStateSnapshot = null;
+        room.gameStarted = false;
+        room.activeRole = null;
       }
       broadcastToRoom(client.roomId, { type, payload: { ...payload, fromId: clientId } }, clientId);
+      if (type === 'end_turn') {
+        room.activeRole = v.role === 'host' ? 'guest' : 'host';
+      }
       break;
     }
 
@@ -453,7 +483,7 @@ function handleMessage(clientId, ws, msg) {
       const client = clients.get(clientId);
       if (!client || !client.roomId) return;
       const room = getRoom(client.roomId);
-      const v = validateGameAction(room, clientId);
+      const v = validateGameAction(room, clientId, type === 'deploy_done');
       if (!v.ok) {
         sendTo(clientId, { type: 'error', payload: { message: v.error } });
         return;

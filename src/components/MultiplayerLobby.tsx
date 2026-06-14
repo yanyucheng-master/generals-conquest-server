@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { MultiplayerPhase } from '@/types/multiplayer';
 import type { Faction, CardDef } from '@/types/game';
 import { FACTIONS } from '@/data/cards';
-import { getSavedServerUrl, setServerUrl, getEffectiveWsUrl, isPublicServerMode, getConfiguredWsUrl } from '@/hooks/useMultiplayer';
+import { setServerUrl, getEffectiveWsUrl, isPublicServerMode, getConfiguredWsUrl } from '@/hooks/useMultiplayer';
 import { loadDeck, loadDIYCards } from '@/data/diySystem';
 import { getDeckCards } from '@/data/diySystem';
 import { ALL_CARDS } from '@/data/cards';
@@ -35,7 +35,8 @@ export default function MultiplayerLobby({
   onBack, onCreateRoom, onJoinRoom, onSelectFaction, onReconnect,
 }: Props) {
   const publicMode = isPublicServerMode();
-  const [joinId, setJoinId] = useState('');
+  const roomIdFromUrl = new URLSearchParams(window.location.search).get('room')?.toUpperCase() || '';
+  const [joinId, setJoinId] = useState(roomIdFromUrl);
   const [copied, setCopied] = useState(false);
   const [serverUrl, setServerUrlState] = useState(getEffectiveWsUrl());
   const [showSettings, setShowSettings] = useState(false);
@@ -46,7 +47,7 @@ export default function MultiplayerLobby({
   const [showDeckSelect, setShowDeckSelect] = useState(false);
   const [customDeckCards, setCustomDeckCards] = useState<CardDef[] | null>(null);
   const [deckError, setDeckError] = useState('');
-  const [autoJoinFromUrl, setAutoJoinFromUrl] = useState(false);
+  const autoJoinFromUrlRef = useRef(Boolean(roomIdFromUrl));
 
   // 加载玩家自创卡组
   const loadCustomDeck = (): CardDef[] | null => {
@@ -58,29 +59,10 @@ export default function MultiplayerLobby({
   };
 
   useEffect(() => {
-    if (publicMode) {
-      const saved = getSavedServerUrl();
-      if (!saved || saved.includes('localhost') || saved.includes('127.0.0.1')) {
-        localStorage.removeItem('mp_server_url');
-        setServerUrlState(getConfiguredWsUrl());
-      }
-    }
-  }, [publicMode]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const roomId = params.get('room');
-    if (roomId && phase === 'menu') {
-      setJoinId(roomId.toUpperCase());
-      setAutoJoinFromUrl(true);
-    }
-  }, [phase]);
-
-  useEffect(() => {
-    if (!autoJoinFromUrl || !wsReady || !joinId.trim() || phase !== 'menu') return;
-    setAutoJoinFromUrl(false);
+    if (!autoJoinFromUrlRef.current || !wsReady || !joinId.trim() || phase !== 'menu') return;
+    autoJoinFromUrlRef.current = false;
     onJoinRoom(joinId.trim());
-  }, [autoJoinFromUrl, wsReady, joinId, phase, onJoinRoom]);
+  }, [wsReady, joinId, phase, onJoinRoom]);
 
   const doSaveAndConnect = (url: string) => {
     setServerUrl(url);
@@ -91,9 +73,10 @@ export default function MultiplayerLobby({
   // ==================== 创建/加入房间中 ====================
   if (phase === 'creating_room' || phase === 'joining') {
     return (
-      <div className="relative w-full h-screen overflow-hidden flex flex-col items-center justify-center">
-        <div className="absolute inset-0 bg-cover bg-center z-0" style={{ backgroundImage: 'url(/bg_war_table.jpg)' }} />
-        <div className="absolute inset-0 bg-black/70 z-[1]" />
+      <div className="release-screen w-full h-screen flex flex-col items-center justify-center">
+        <div className="release-backdrop release-backdrop-menu" />
+        <div className="release-vignette" />
+        <div className="release-grain" />
         <div className="relative z-10 flex flex-col items-center gap-3">
           <Loader2 className="w-10 h-10 text-blue-400 animate-spin" />
           <p className="text-gray-300 text-sm">{phase === 'creating_room' ? '正在创建房间...' : '正在加入房间...'}</p>
@@ -105,12 +88,13 @@ export default function MultiplayerLobby({
   // ==================== 菜单 / 连接中 ====================
   if (phase === 'menu' || phase === 'connecting') {
     return (
-      <div className="relative w-full h-screen overflow-hidden flex flex-col items-center justify-center">
-        <div className="absolute inset-0 bg-cover bg-center z-0" style={{ backgroundImage: 'url(/bg_war_table.jpg)' }} />
-        <div className="absolute inset-0 bg-black/70 z-[1]" />
+      <div className="release-screen w-full h-screen flex flex-col items-center justify-center">
+        <div className="release-backdrop release-backdrop-menu" />
+        <div className="release-vignette" />
+        <div className="release-grain" />
 
-        <div className="relative z-10 flex flex-col items-center gap-4 px-4 w-full max-w-sm">
-          <button onClick={onBack} className="absolute -top-16 left-0 text-gray-400 hover:text-white flex items-center gap-1 text-sm cursor-pointer transition-colors">
+        <div className="release-lobby-panel relative z-10 flex flex-col items-center gap-4 px-4 w-full max-w-sm">
+          <button onClick={onBack} className="release-back-button absolute -top-14 left-0">
             <ArrowLeft className="w-4 h-4" /> 返回
           </button>
 
@@ -126,7 +110,7 @@ export default function MultiplayerLobby({
           </div>
 
           {/* 连接状态 + 服务器地址 */}
-          <div className="w-full bg-gray-900/80 border border-gray-700 rounded-lg p-3">
+          <div className="w-full bg-slate-950/70 border border-amber-700/20 rounded-lg p-3 backdrop-blur-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 {phase === 'connecting' ? (
@@ -198,19 +182,19 @@ export default function MultiplayerLobby({
           ) : publicMode ? (
             <>
               {/* 公网模式：创建 / 加入 */}
-              <div className="w-full bg-blue-900/20 border border-blue-700/40 rounded-lg p-4 space-y-3">
+              <div className="w-full bg-blue-950/35 border border-blue-500/25 rounded-lg p-4 space-y-3">
                 <h3 className="text-sm font-bold text-blue-400">创建房间</h3>
                 <p className="text-[10px] text-gray-400">创建后把房间ID发给朋友，对方输入ID即可加入</p>
                 <button
                   onClick={onCreateRoom}
                   disabled={!wsReady}
-                  className={`w-full py-2 rounded text-white font-bold text-sm cursor-pointer ${wsReady ? 'bg-blue-700 hover:bg-blue-600' : 'bg-gray-600 cursor-not-allowed'}`}
+                  className={`w-full py-2 rounded text-white font-bold text-sm cursor-pointer transition-all ${wsReady ? 'bg-gradient-to-b from-blue-600 to-blue-800 hover:brightness-110 border border-blue-400/30' : 'bg-gray-600 cursor-not-allowed'}`}
                 >
                   {wsReady ? '创建房间' : '连接服务器中...'}
                 </button>
               </div>
 
-              <div className="w-full bg-green-900/20 border border-green-700/40 rounded-lg p-4 space-y-3">
+              <div className="w-full bg-emerald-950/35 border border-emerald-500/25 rounded-lg p-4 space-y-3">
                 <h3 className="text-sm font-bold text-green-400">加入房间</h3>
                 <p className="text-[10px] text-gray-400">向房主索取房间ID，输入后点击加入</p>
                 <div className="flex gap-2">

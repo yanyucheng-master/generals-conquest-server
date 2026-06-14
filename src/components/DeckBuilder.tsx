@@ -9,6 +9,7 @@ import {
 import type { DIYCard, DeckEntry } from '@/data/diySystem';
 import CardGallery from './CardGallery';
 import CardCreator from './CardCreator';
+import { getVisibleSkillLabels } from '@/utils/skillLabels';
 
 interface Props {
   onBack: () => void;
@@ -38,7 +39,7 @@ export default function DeckBuilder({ onBack }: Props) {
       if (qualityFilter && card.quality !== qualityFilter) return false;
       if (search) {
         const q = search.toLowerCase();
-        return card.name.toLowerCase().includes(q) || card.skills.some(s => s.toLowerCase().includes(q));
+        return card.name.toLowerCase().includes(q) || getVisibleSkillLabels(card.skills, card.desc).some(skill => skill.toLowerCase().includes(q));
       }
       return true;
     });
@@ -50,7 +51,7 @@ export default function DeckBuilder({ onBack }: Props) {
       if (subtypeFilter && card.subtype !== subtypeFilter) return false;
       if (search) {
         const q = search.toLowerCase();
-        return card.name.toLowerCase().includes(q) || card.skills.some(s => s.toLowerCase().includes(q));
+        return card.name.toLowerCase().includes(q) || getVisibleSkillLabels(card.skills, card.desc).some(skill => skill.toLowerCase().includes(q));
       }
       return true;
     });
@@ -418,10 +419,10 @@ export default function DeckBuilder({ onBack }: Props) {
                 </div>
               )}
 
-              {detailCard.skills.length > 0 && (
+              {getVisibleSkillLabels(detailCard.skills, detailCard.desc).length > 0 && (
                 <div className="space-y-1.5 mb-3">
                   <div className="text-xs text-gray-400 font-bold">技能</div>
-                  {detailCard.skills.map((skill: string, i: number) => (
+                  {getVisibleSkillLabels(detailCard.skills, detailCard.desc).map((skill: string, i: number) => (
                     <div key={i} className="bg-gray-800/60 rounded-lg p-2">
                       <span className="text-yellow-400 text-xs font-bold">{skill}</span>
                     </div>
@@ -459,12 +460,44 @@ function PoolCardItem({ card, isDIY, onAdd, canAdd, onDelete, onEdit, onPreview 
     '彩': 'border-purple-600/50',
   };
   const color = isDIY ? 'border-cyan-700/50' : (qualityColors[card.quality] || 'border-gray-700/50');
+  const skillLabels = getVisibleSkillLabels(card.skills, card.desc);
+
+  const handleAddFromRow = () => {
+    if (canAdd) onAdd();
+  };
 
   return (
-    <div className={`flex items-center gap-2 p-1.5 rounded border ${color} bg-gray-900/40 hover:bg-gray-800/60 transition-all`}>
-      <div className="flex-1 min-w-0 cursor-pointer" onClick={onPreview}>
+    <div
+      onClick={handleAddFromRow}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          handleAddFromRow();
+        }
+      }}
+      role="button"
+      tabIndex={canAdd ? 0 : -1}
+      aria-disabled={!canAdd}
+      title={canAdd ? `添加${card.name}到当前卡组` : '已达添加上限'}
+      className={`flex min-h-12 items-center gap-2 rounded border p-1.5 transition-all ${color} ${
+        canAdd
+          ? 'cursor-pointer bg-gray-900/40 hover:bg-gray-800/70 hover:border-green-500/45'
+          : 'cursor-not-allowed bg-gray-950/55 opacity-60'
+      }`}
+    >
+      <div className="w-36 min-w-0 shrink-0 sm:w-44 lg:w-48">
         <div className="flex items-center gap-1">
-          <span className="text-white text-[11px] font-bold truncate">{card.name}</span>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onPreview();
+            }}
+            className="truncate text-left text-[11px] font-bold text-white underline-offset-2 transition-colors hover:text-amber-300 hover:underline"
+            title={`查看${card.name}详情`}
+          >
+            {card.name}
+          </button>
           {isDIY && <span className="text-[8px] text-cyan-400 bg-cyan-900/40 px-1 rounded shrink-0">DIY</span>}
           <span className={`text-[8px] shrink-0 ${card.quality === '彩' ? 'text-purple-400' : card.quality === '金' ? 'text-yellow-400' : card.quality === '银' ? 'text-slate-300' : 'text-amber-400'}`}>{card.quality}</span>
         </div>
@@ -481,19 +514,34 @@ function PoolCardItem({ card, isDIY, onAdd, canAdd, onDelete, onEdit, onPreview 
           <span>{card.subtype}</span>
         </div>
       </div>
+
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+        {skillLabels.map(skill => (
+          <span
+            key={skill}
+            className="rounded border border-amber-400/20 bg-amber-950/35 px-1.5 py-0.5 text-[8px] font-bold text-amber-200"
+          >
+            {skill}
+          </span>
+        ))}
+      </div>
+
       {/* P2-10: DIY卡编辑删除按钮 */}
       {isDIY && onEdit && onDelete && (
         <div className="flex gap-1 shrink-0">
-          <button onClick={onEdit} className="p-1 hover:bg-blue-900/40 rounded text-blue-400 cursor-pointer transition-all" title="编辑">
+          <button onClick={(event) => { event.stopPropagation(); onEdit(); }} className="p-1 hover:bg-blue-900/40 rounded text-blue-400 cursor-pointer transition-all" title="编辑">
             <Edit3 className="w-3 h-3" />
           </button>
-          <button onClick={onDelete} className="p-1 hover:bg-red-900/40 rounded text-red-400 cursor-pointer transition-all" title="删除">
+          <button onClick={(event) => { event.stopPropagation(); onDelete(); }} className="p-1 hover:bg-red-900/40 rounded text-red-400 cursor-pointer transition-all" title="删除">
             <Trash2 className="w-3 h-3" />
           </button>
         </div>
       )}
       <button
-        onClick={onAdd}
+        onClick={(event) => {
+          event.stopPropagation();
+          onAdd();
+        }}
         disabled={!canAdd}
         className={`p-1 rounded cursor-pointer shrink-0 transition-all ${canAdd ? 'hover:bg-green-900/40 text-green-400' : 'text-gray-600 cursor-not-allowed'}`}
         title={!canAdd ? '已达上限' : '添加'}

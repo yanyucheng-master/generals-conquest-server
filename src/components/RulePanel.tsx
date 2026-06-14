@@ -14,7 +14,7 @@ const GAME_RULES = [
   { title: '回合流程', content: '资源阶段（金币+抽牌+利息+解冻）→部署阶段→攻击阶段→结束阶段→切换回合。' },
 ];
 
-// 42个技能词典
+// 仅展示正式技能；伤害类型等内部效果标记不进入技能词典。
 const SKILL_ENTRIES = Object.entries(SKILL_LABELS).map(([key, label]) => {
   const descs: Record<string, string> = {
     flashStrike: '部署时立即额外攻击1次',
@@ -26,7 +26,6 @@ const SKILL_ENTRIES = Object.entries(SKILL_LABELS).map(([key, label]) => {
     tacticCmd: '近战友军+X攻',
     shootCmd: '弓箭友军+X攻',
     focusFire: '本回合全体攻击指定目标',
-    magicDmg: '造成魔法伤害（无视护甲）',
     shield: '目标+2护甲',
     balance: '手牌中所有士兵费用变为指定值',
     magicSwap: '随机交换两个敌人位置',
@@ -72,7 +71,7 @@ const SKILL_ENTRIES = Object.entries(SKILL_LABELS).map(([key, label]) => {
 });
 
 export default function RulePanel() {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [skillOpen, setSkillOpen] = useState(false);
 
   // 小屏幕检测
@@ -93,18 +92,18 @@ export default function RulePanel() {
       <div
         className={`
           fixed top-2 right-2 z-40 w-[260px] max-h-[90vh] rounded-xl overflow-hidden
-          border border-blue-800/40 shadow-xl shadow-black/40
+          border border-amber-700/25 shadow-xl shadow-black/40
           transition-all duration-300
           ${mobileOpen ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-full pointer-events-none'}
           lg:opacity-100 lg:translate-x-0 lg:pointer-events-auto
         `}
-        style={{ background: 'rgba(15, 30, 60, 0.92)', backdropFilter: 'blur(12px)' }}
+        style={{ background: 'rgba(7, 12, 20, 0.94)', backdropFilter: 'blur(14px)' }}
       >
         {/* 标题栏 */}
-        <div className="flex items-center justify-between px-3 py-2 bg-blue-900/40 border-b border-blue-800/30">
+        <div className="flex items-center justify-between px-3 py-2 bg-amber-950/30 border-b border-amber-700/20">
           <div className="flex items-center gap-1.5">
-            <BookOpen className="w-3.5 h-3.5 text-blue-400" />
-            <span className="text-xs font-bold text-blue-300">📖 规则 & 技能</span>
+            <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+            <span className="text-xs font-bold text-amber-200">规则与技能</span>
           </div>
           <div className="flex items-center gap-1">
             <button onClick={() => setCollapsed(!collapsed)} className="p-0.5 hover:bg-blue-800/50 rounded">
