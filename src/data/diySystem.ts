@@ -48,14 +48,14 @@ export const SKILL_VALUES: Record<string, SkillValueEntry> = {
   '法力增幅1': { value: 2.5, desc: '全体魔法+1攻（一次性）' },
   '法力增幅2': { value: 5.0, desc: '全体魔法+2攻（一次性）' },
   '法力增幅5': { value: 10.0, desc: '全体魔法+5攻（一次性）' },
-  '沉默1': { value: 3.0, desc: '敌方全体沉默1回合' },
-  '沉默2': { value: 6.0, desc: '敌方全体沉默2回合' },
-  '沉默5': { value: 12.0, desc: '敌方全体沉默5回合' },
+  '沉默1': { value: 5.0, desc: '敌方全体沉默1回合' },
+  '沉默2': { value: 8.0, desc: '敌方全体沉默2回合' },
+  '沉默5': { value: 14.0, desc: '敌方全体沉默5回合' },
   '叱吓1': { value: 2.0, desc: '敌方近战/弓箭-1攻' },
   '叱吓2': { value: 4.0, desc: '敌方近战/弓箭-2攻' },
-  '均衡3': { value: 2.5, desc: '手牌士兵费用变3' },
-  '均衡4': { value: 2.5, desc: '手牌士兵费用变4' },
-  '均衡5': { value: 2.5, desc: '手牌士兵费用变5' },
+  '均衡3': { value: 5.5, desc: '手牌士兵费用变3' },
+  '均衡4': { value: 3.5, desc: '手牌士兵费用变4' },
+  '均衡5': { value: 1.5, desc: '手牌士兵费用变5' },
   '集火': { value: 2.0, desc: '标记目标强制集火' },
   '长矛': { value: 1.5, desc: '近战射程变2' },
   '短弓': { value: 1.0, desc: '弓箭可打距离1' },
@@ -101,11 +101,19 @@ export const SKILL_VALUES: Record<string, SkillValueEntry> = {
   '护甲3': { value: 3.0, desc: '部署时+3护甲' },
   // 法术卡技能
   '消灭': { value: 8.0, desc: '直接消灭一个单位' },
-  '刷新增幅': { value: 5.0, desc: '刷新所有法力增幅' },
+  '刷新增幅': { value: 6.0, desc: '刷新所有法力增幅' },
   '净化沉默': { value: 3.0, desc: '净化沉默效果' },
-  '魔法伤害': { value: 4.0, desc: '造成法术伤害' },
-  // 新增技能（v0.99 新卡包）
-  '抽牌': { value: 3.5, desc: '抽取卡牌' },
+  '魔法伤害': { value: 3.0, desc: '造成法术伤害' },
+  '魔法伤害1': { value: 1.5, desc: '造成1点法术伤害' },
+  '魔法伤害2': { value: 3.0, desc: '造成2点法术伤害' },
+  '魔法伤害6': { value: 7.0, desc: '造成6点法术伤害' },
+  '总部伤害12': { value: 12.0, desc: '对敌方总部造成12点伤害' },
+  '天火降临': { value: 10.0, desc: '对敌方总部造成高额伤害' },
+  // 新增技能（V1.0 新卡包）
+  '抽牌': { value: 3.0, desc: '抽取卡牌' },
+  '抽牌1': { value: 3.0, desc: '抽取1张卡牌' },
+  '抽牌2': { value: 5.0, desc: '抽取2张卡牌' },
+  '抽牌3': { value: 7.0, desc: '抽取3张卡牌' },
   '总部恢复': { value: 2.5, desc: '恢复总部生命' },
   '弃牌': { value: 3.0, desc: '弃掉对手手牌' },
 };
@@ -155,6 +163,11 @@ export const SKILL_CODE_MAP: Record<string, Skill> = {
   '刷新增幅': 'refreshBoost',
   '净化沉默': 'cleanseSilence',
   '魔法伤害': 'magicDmg',
+  '魔法伤害1': 'magicDmg',
+  '魔法伤害2': 'magicDmg',
+  '魔法伤害6': 'magicDmg',
+  '总部伤害12': 'magicDmg',
+  '天火降临': 'magicDmg',
   '抽牌': 'drawCard',
   '抽牌1': 'drawCard',
   '抽牌2': 'drawCard',
@@ -245,7 +258,7 @@ export const SKILL_GROUPS: SkillGroup[] = [
   },
   {
     label: '防御类',
-    skills: ['物抗1', '物抗2', '物抗3', '法抗1', '法抗2', '法抗3', '全抗1', '全抗2', '全抗3', '全抗6', '护甲1', '护甲2', '护甲3', '闪避', '飞翔', '隐蔽', '免疫', '隐踪', '伪装'],
+    skills: ['物抗1', '物抗2', '物抗3', '法抗1', '法抗2', '法抗3', '全抗1', '全抗2', '全抗3', '全抗6', '护甲1', '护甲2', '护甲3', '闪避', '飞翔', '隐蔽', '免疫', '伪装'],
   },
   {
     label: '控制类',
@@ -253,11 +266,11 @@ export const SKILL_GROUPS: SkillGroup[] = [
   },
   {
     label: 'DOT/特效',
-    skills: ['流血1', '流血2', '流血3', '撕裂', '中毒1', '中毒2', '中毒3', '中毒6', '毒爆', '伏击1', '伏击2', '伏击3', '追击1'],
+    skills: ['流血1', '流血2', '流血3', '撕裂', '中毒1', '中毒2', '中毒3', '中毒6', '毒爆', '伏击1', '伏击2', '伏击3'],
   },
   {
     label: '光环/辅助',
-    skills: ['战术指挥1', '战术指挥2', '战术指挥3', '射击指挥1', '射击指挥2', '射击指挥3', '法力增幅1', '法力增幅2', '法力增幅5', '强运', '生长1', '灵动1'],
+    skills: ['战术指挥1', '战术指挥2', '战术指挥3', '射击指挥1', '射击指挥2', '射击指挥3', '法力增幅1', '法力增幅2', '法力增幅5', '强运', '生长1'],
   },
   {
     label: '经济/治疗',
@@ -358,13 +371,29 @@ export interface JudgeResult {
   skillValue: string;
   positionBonus: number;
   negativePenalty: number;
+  /** 兼容旧存档；彩卡尺度中冲突不再降低评分。 */
   conflictPenalty: number;
   totalValue: string;
   deviation: string;
-  verdict: '超模' | '轻微超模' | '平衡' | '轻微亏模' | '亏模';
+  verdict: '未开放技能' | '身材超出彩卡上限' | '破坏性组合' | '破坏性超模' | '彩色高危' | '彩色平衡' | '明显亏模';
   color: 'red' | 'orange' | 'green';
   skillDetails: { name: string; value: number; desc: string }[];
   conflicts: ConflictRule[];
+  warnings: string[];
+  hardRuleViolations: string[];
+  details: {
+    bodyValue: number;
+    skillValue: number;
+    positiveSkillValue: number;
+    subtypeTax: number;
+    positionBonus: number;
+    synergyBonus: number;
+    comboRisk: number;
+    negativePenalty: number;
+    hardLimit: number;
+    warningLimit: number;
+    lowerLimit: number;
+  };
   suggestions: string[];
   canSave: boolean;
 }
@@ -378,40 +407,97 @@ const POSITION_MODIFIER: Record<string, Record<string, number>> = {
   '随机': { front: 0.3, back: 0.3, both: 0.3 },
 };
 
+const SUBTYPE_TAX: Record<string, number> = {
+  '近战': 0,
+  '弓箭': 0.3,
+  '狙击': 0.7,
+  '魔法': 1.0,
+  '随机': 1.2,
+};
+
+const BODY_HARD_CAP: Record<number, number> = {
+  1: 8,
+  2: 10,
+  3: 12,
+  4: 14,
+  5: 16,
+  6: 18,
+};
+
+const UNIMPLEMENTED_SKILL_CODES = new Set<string>(['stealth', 'pursuit', 'nimble', 'agileGrowth', 'moveGrowth']);
+export const UNIMPLEMENTED_DIY_SKILLS = ['隐踪', '追击', '灵动'] as const;
+
+function hasSkill(skills: string[], family: string): boolean {
+  return skills.some(skill => skill.includes(family));
+}
+
+function isUnimplementedSkill(skill: string): boolean {
+  if (UNIMPLEMENTED_DIY_SKILLS.some(name => skill.includes(name))) return true;
+  const code = SKILL_CODE_MAP[skill];
+  return code !== 'agile' && UNIMPLEMENTED_SKILL_CODES.has(String(code ?? skill));
+}
+
+function getComboRisk(card: { cost: number; hp: number; skills: string[]; subtype?: string }, isSpell: boolean): number {
+  const { skills } = card;
+  const flash = hasSkill(skills, '闪击');
+  const bleed = hasSkill(skills, '流血');
+  const poison = hasSkill(skills, '中毒');
+  const highDot = skills.some(skill => /^(流血|中毒)([3-9]|\d{2,})$/.test(skill));
+  let risk = 0;
+
+  if (flash && (bleed || poison)) risk += 1.5;
+  if (flash && (hasSkill(skills, '毒爆') || hasSkill(skills, '撕裂'))) risk += 2;
+  if (poison && hasSkill(skills, '毒爆')) risk += 1.5;
+  if (bleed && hasSkill(skills, '撕裂')) risk += 1.2;
+  if (hasSkill(skills, '飞翔') && hasSkill(skills, '俯冲')) risk += 0.8;
+  if (hasSkill(skills, '嘲讽') && (hasSkill(skills, '全抗') || hasSkill(skills, '护甲') || hasSkill(skills, '反击'))) risk += 1;
+  if (card.subtype === '随机' && hasSkill(skills, '强运')) risk += 1.2;
+  if (card.subtype === '随机' && highDot) risk += 1;
+  if (card.subtype === '魔法' && hasSkill(skills, '法力增幅')) risk += 1;
+  if (hasSkill(skills, '法力增幅') && hasSkill(skills, '刷新增幅')) risk += 2;
+  if (hasSkill(skills, '免疫') && card.subtype === '魔法' && card.hp >= 6) risk += 1.2;
+  if (!isSpell && card.cost >= 6 && hasSkill(skills, '均衡3')) risk += 2;
+
+  return risk;
+}
+
+function getBodyHardCap(cost: number): number {
+  return BODY_HARD_CAP[cost] ?? 22;
+}
+
 export function judgeCard(card: {
   cost: number;
   atk: number;
   hp: number;
+  armor?: number;
+  type?: '士兵' | '法术';
   skills: string[];
   position?: string;
   subtype?: string;
 }): JudgeResult {
-  // 检测是否为法术卡（无身材）
-  const isSpell = card.hp === 0 && card.atk === 0;
+  const isSpell = card.type === '法术' || (card.type !== '士兵' && card.hp === 0 && card.atk === 0);
+  const baseValue = isSpell ? card.cost * 1.5 + 0.5 : card.cost * 2.2 + 1;
+  const bodyValue = isSpell ? 0 : card.atk + card.hp + (card.armor ?? 0);
 
-  // 费用基准（法术卡特殊处理）
-  let baseValue: number;
-  if (isSpell) {
-    baseValue = card.cost * 1.5 + 0.5;
-  } else {
-    baseValue = card.cost * 2.2 + 1;
-  }
-
-  const bodyValue = card.atk + card.hp;
-
-  // 技能价值
   let skillValue = 0;
+  let negativePenalty = 0;
+  let positiveSkillCount = 0;
   const skillDetails: { name: string; value: number; desc: string }[] = [];
 
   for (const skill of card.skills) {
     const entry = SKILL_VALUES[skill];
     if (entry) {
-      skillValue += entry.value;
+      if (entry.value >= 0) {
+        skillValue += entry.value;
+        if (entry.value > 0 && !isUnimplementedSkill(skill)) positiveSkillCount++;
+      } else {
+        negativePenalty += entry.value;
+      }
       skillDetails.push({ name: skill, value: entry.value, desc: entry.desc });
     }
   }
+  const positiveSkillValue = skillValue;
 
-  // 部署位置修正（法术卡无位置修正）
   let positionBonus = 0;
   if (!isSpell) {
     const posKey = card.position || 'front';
@@ -419,82 +505,99 @@ export function judgeCard(card: {
     positionBonus = POSITION_MODIFIER[subKey]?.[posKey] || 0;
   }
 
-  // 负面效果修正
-  let negativePenalty = 0;
-  if (card.skills.some(s => s.includes('悬赏'))) negativePenalty -= 0.5;
-
-  // 冲突技能惩罚
   const conflicts = checkConflicts(card.skills);
-  let conflictPenalty = 0;
-  if (conflicts.length > 0) {
-    conflictPenalty -= conflicts.filter(c => c.type !== 'missing').length * 0.5;
+  const conflictPenalty = 0;
+  const subtypeTax = isSpell ? 0 : (SUBTYPE_TAX[card.subtype || '近战'] ?? 0);
+  const synergyBonus = Math.max(0, positiveSkillCount - 1) * 0.6;
+  const comboRisk = getComboRisk(card, isSpell);
+  const totalValue = bodyValue + skillValue + subtypeTax + positionBonus + synergyBonus + comboRisk + negativePenalty;
+  const deviation = totalValue - baseValue;
+  const warningLimit = card.cost <= 2 ? 6 : card.cost <= 5 ? 7 : 8;
+  const hardLimit = 9 + card.cost * 0.8;
+  const lowerLimit = -8;
+
+  const warnings = conflicts.map(conflict => conflict.reason);
+  const hardRuleViolations: string[] = [];
+  const unimplemented = card.skills.filter(isUnimplementedSkill);
+  const bodyHardCap = getBodyHardCap(card.cost);
+
+  if (!isSpell && bodyValue > bodyHardCap) {
+    hardRuleViolations.push(`身材超出彩卡上限（${bodyValue} > ${bodyHardCap}）`);
+  }
+  if (!isSpell && card.cost === 1 && bodyValue >= 7 && positiveSkillCount > 0) {
+    hardRuleViolations.push('1费高身材单位不能携带正面技能');
+  }
+  if (!isSpell && card.cost === 2 && bodyValue >= 9 && positiveSkillValue > 2) {
+    hardRuleViolations.push('2费高身材单位的正面技能价值不能超过2');
+  }
+  if (!isSpell && card.cost === 3 && bodyValue >= 11 && positiveSkillValue > 4) {
+    hardRuleViolations.push('3费高身材单位的正面技能价值不能超过4');
+  }
+  if (!isSpell && card.cost <= 2 && bodyValue >= bodyHardCap && positiveSkillCount > 0) {
+    hardRuleViolations.push('低费满上限身材不能叠加正面技能');
+  }
+  if (!isSpell && card.cost <= 2 && ['魔法', '随机', '狙击'].includes(card.subtype || '') && card.atk > 3) {
+    hardRuleViolations.push('低费魔法/随机/狙击单位攻击过高');
   }
 
-  // 技能数量协同加成
-  const validSkillCount = card.skills.filter(s => SKILL_VALUES[s] !== undefined).length;
-  const synergyBonus = validSkillCount > 1 ? (validSkillCount - 1) * 0.5 : 0;
+  if (card.cost <= 2) {
+    const bannedFamilies = ['闪击', '消灭', '沉默2', '沉默5', '均衡3', '法力增幅5', '刷新增幅', '抽牌3'];
+    for (const family of bannedFamilies) {
+      if (hasSkill(card.skills, family)) hardRuleViolations.push(`低费卡禁止携带${family}`);
+    }
+    if (hasSkill(card.skills, '中毒') && hasSkill(card.skills, '毒爆')) hardRuleViolations.push('低费卡禁止中毒与毒爆组合');
+    if (hasSkill(card.skills, '流血') && hasSkill(card.skills, '撕裂')) hardRuleViolations.push('低费卡禁止流血与撕裂组合');
+    if (card.skills.some(skill => /(?:总部(?:伤害|直伤)|天火).*?(?:8|9|\d{2,})/.test(skill) || skill === '天火降临')) {
+      hardRuleViolations.push('低费卡禁止8点及以上总部直伤');
+    }
+    if (card.skills.some(skill => /(限制部署|禁止部署|封锁部署)/.test(skill))) {
+      hardRuleViolations.push('低费卡禁止限制部署');
+    }
+  }
+  if (card.cost < 6 && hasSkill(card.skills, '消灭')) hardRuleViolations.push('消灭最低费用为6');
+  if (card.cost < 6 && hasSkill(card.skills, '法力增幅5')) hardRuleViolations.push('法力增幅5最低费用为6');
 
-  // 总价值
-  const totalValue = bodyValue + skillValue + positionBonus + negativePenalty + conflictPenalty + synergyBonus;
-  const deviation = totalValue - baseValue;
+  if (deviation > warningLimit) warnings.push(`评分偏差超过彩色警戒线（+${warningLimit}）`);
+  if (deviation < lowerLimit) warnings.push(`评分偏差低于彩色亏模线（${lowerLimit}）`);
 
-  // 分档阈值（校准后）
-  const upperLimit = card.cost >= 6 ? 7 : 6;
-  const lowerLimit = -5;
-
-  // 评判
   let verdict: JudgeResult['verdict'];
   let color: JudgeResult['color'];
-  const suggestions: string[] = [];
-  const dev = deviation;
+  let canSave = true;
 
-  if (dev > upperLimit) {
-    verdict = '超模';
+  if (unimplemented.length > 0) {
+    verdict = '未开放技能';
     color = 'red';
-    if (isSpell) {
-      suggestions.push('建议：降低技能等级或减少技能数量');
-    } else {
-      suggestions.push('建议：降低攻击值或生命值');
-      suggestions.push('建议：减少技能数量或降低技能等级');
-      if (card.atk > card.hp) suggestions.push('建议：降低攻击值，增加生命值');
-      else suggestions.push('建议：降低生命值，增加攻击值');
-    }
-  } else if (dev > upperLimit - 2) {
-    verdict = '轻微超模';
+    canSave = false;
+    hardRuleViolations.unshift(`包含未开放技能：${unimplemented.join('、')}`);
+  } else if (hardRuleViolations.some(rule => rule.startsWith('身材超出彩卡上限'))) {
+    verdict = '身材超出彩卡上限';
+    color = 'red';
+    canSave = false;
+  } else if (hardRuleViolations.length > 0) {
+    verdict = '破坏性组合';
+    color = 'red';
+    canSave = false;
+  } else if (deviation > hardLimit) {
+    verdict = '破坏性超模';
+    color = 'red';
+    canSave = false;
+    hardRuleViolations.push(`评分偏差超过破坏性上限（+${hardLimit.toFixed(1)}）`);
+  } else if (deviation > warningLimit) {
+    verdict = '彩色高危';
     color = 'orange';
-    if (isSpell) {
-      suggestions.push('建议：适当降低技能等级');
-    } else {
-      if (card.atk >= card.hp) suggestions.push('建议：适当降低攻击值');
-      else suggestions.push('建议：适当降低生命值');
-    }
-  } else if (dev >= lowerLimit + 2) {
-    verdict = '平衡';
+  } else if (deviation >= lowerLimit) {
+    verdict = '彩色平衡';
     color = 'green';
-    suggestions.push('卡牌平衡，可以使用！');
-    if (conflicts.length > 0) {
-      suggestions.push(`注意：存在${conflicts.length}个技能冲突/依赖，建议调整`);
-    }
-  } else if (dev >= lowerLimit) {
-    verdict = '轻微亏模';
-    color = 'orange';
-    if (isSpell) {
-      suggestions.push('建议：适当增加技能等级');
-    } else {
-      if (card.atk <= card.hp) suggestions.push('建议：适当增加攻击值');
-      else suggestions.push('建议：适当增加生命值');
-    }
   } else {
-    verdict = '亏模';
-    color = 'red';
-    if (isSpell) {
-      suggestions.push('建议：增加技能或提高技能等级');
-    } else {
-      suggestions.push('建议：增加攻击值或生命值');
-      suggestions.push('建议：增加技能或提高技能等级');
-      if (card.cost > 5) suggestions.push('建议：适当降低费用');
-    }
+    verdict = '明显亏模';
+    color = 'orange';
   }
+
+  const suggestions = [
+    ...hardRuleViolations.map(rule => `阻止保存：${rule}`),
+    ...warnings.map(warning => `注意：${warning}`),
+  ];
+  if (suggestions.length === 0) suggestions.push('卡牌处于彩色尺度可接受区间，可以保存。');
 
   return {
     baseValue: baseValue.toFixed(1),
@@ -509,8 +612,23 @@ export function judgeCard(card: {
     color,
     skillDetails,
     conflicts,
+    warnings,
+    hardRuleViolations,
+    details: {
+      bodyValue,
+      skillValue,
+      positiveSkillValue,
+      subtypeTax,
+      positionBonus,
+      synergyBonus,
+      comboRisk,
+      negativePenalty,
+      hardLimit,
+      warningLimit,
+      lowerLimit,
+    },
     suggestions,
-    canSave: verdict === '平衡' || verdict === '轻微超模' || verdict === '轻微亏模',
+    canSave,
   };
 }
 
@@ -845,7 +963,7 @@ interface MigratableGameData {
 }
 
 function migrateData(data: MigratableGameData): { success: boolean; message: string } {
-  // v0.x → v1.0 迁移
+  // 历史版本 → V1.0 迁移
   if (!data.version || data.version < '1.0') {
     // 迁移DIY卡：添加damageType字段（如果缺失）
     for (const card of data.diyCards || []) {

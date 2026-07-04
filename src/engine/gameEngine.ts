@@ -99,7 +99,7 @@ function cardToUnit(card: CardDef): Unit {
     skills: [...card.skills],
     faction: card.faction,
     damageType: getDamageType(card.subtype),
-    canAttack: true, // v1.0: 所有单位部署后都能攻击
+    canAttack: true, // V1.0: 所有单位部署后都能攻击
     // frozen 字段已废弃（freeze技能已删除）
     frozen: false,
     frozenTurns: 0,
@@ -918,7 +918,7 @@ export function applyDamage(
     // 不触发护甲破碎后的额外格挡保护
   }
 
-  // 伏击 v1.0：受击前对攻击者造成伤害，若击杀则取消攻击
+  // 伏击 V1.0：受击前对攻击者造成伤害，若击杀则取消攻击
   if (targetUnit.skills.includes('ambush') && !targetUnit.silenceTurns) {
     const ambushDmg = getSkillLevel(targetUnit, 'ambush');
     const attackerBoard = attackerWho === 'player' ? state.player.board : state.enemy.board;
@@ -936,7 +936,7 @@ export function applyDamage(
     }
   }
 
-  // 反击 v2.0：被近战攻击命中时反击 — 走完整攻击流程
+  // 反击 V1.0：被近战攻击命中时反击 — 走完整攻击流程
   // isCounter=true 防止无限递归（反击不触发反击）
   if (!isCounter && targetUnit.skills.includes('counter') && !targetUnit.silenceTurns && attacker.subtype === '近战' && dmgType === '物理') {
     const counterDmg = targetUnit.atk;

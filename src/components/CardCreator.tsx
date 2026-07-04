@@ -31,7 +31,7 @@ export default function CardCreator({ onBack, onSaved }: Props) {
 
   const handleJudge = useCallback(() => {
     const selectedSkills = skills.filter(Boolean);
-    const result = judgeCard({ cost, atk, hp, skills: selectedSkills, position, subtype });
+    const result = judgeCard({ cost, atk, hp, armor: 0, type: '士兵', skills: selectedSkills, position, subtype });
     setJudgeResult(result);
   }, [cost, atk, hp, skills, position, subtype]);
 
@@ -218,7 +218,7 @@ export default function CardCreator({ onBack, onSaved }: Props) {
 
           {[0, 1, 2].map(i => (
             <div key={i}>
-              <label className="text-xs text-gray-400">技能{i + 1}{i === 0 ? '（必选）' : '（可选）'}</label>
+              <label className="text-xs text-gray-400">技能{i + 1}（可选）</label>
               <select
                 value={skills[i]}
                 onChange={e => handleSkillChange(i, e.target.value)}
@@ -275,8 +275,8 @@ export default function CardCreator({ onBack, onSaved }: Props) {
                 judgeResult.color === 'green' ? 'text-green-400' :
                 judgeResult.color === 'red' ? 'text-red-400' : 'text-orange-400'
               }`}>
-                {judgeResult.verdict === '平衡' ? <CheckCircle className="w-5 h-5 inline mr-1" /> :
-                 judgeResult.verdict.includes('超模') ? <XCircle className="w-5 h-5 inline mr-1" /> :
+                {judgeResult.verdict === '彩色平衡' ? <CheckCircle className="w-5 h-5 inline mr-1" /> :
+                 !judgeResult.canSave ? <XCircle className="w-5 h-5 inline mr-1" /> :
                  <AlertTriangle className="w-5 h-5 inline mr-1" />}
                 {judgeResult.verdict}
               </h3>
@@ -294,20 +294,49 @@ export default function CardCreator({ onBack, onSaved }: Props) {
               <div className="flex justify-between border-b border-gray-700 pb-1">
                 <span className="text-gray-400">技能价值</span><span>{judgeResult.skillValue}</span>
               </div>
+              {judgeResult.details.subtypeTax !== 0 && (
+                <div className="flex justify-between border-b border-gray-700 pb-1">
+                  <span className="text-gray-400">子类型税</span><span>+{judgeResult.details.subtypeTax.toFixed(1)}</span>
+                </div>
+              )}
               {judgeResult.positionBonus !== 0 && (
                 <div className="flex justify-between border-b border-gray-700 pb-1">
                   <span className="text-gray-400">部署修正</span><span>{judgeResult.positionBonus > 0 ? '+' : ''}{judgeResult.positionBonus.toFixed(1)}</span>
                 </div>
               )}
-              {judgeResult.conflictPenalty !== 0 && (
+              {judgeResult.details.synergyBonus !== 0 && (
                 <div className="flex justify-between border-b border-gray-700 pb-1">
-                  <span className="text-gray-400">冲突惩罚</span><span className="text-red-400">{judgeResult.conflictPenalty}</span>
+                  <span className="text-gray-400">多技能协同</span><span>+{judgeResult.details.synergyBonus.toFixed(1)}</span>
+                </div>
+              )}
+              {judgeResult.details.comboRisk !== 0 && (
+                <div className="flex justify-between border-b border-gray-700 pb-1">
+                  <span className="text-gray-400">组合风险</span><span className="text-orange-400">+{judgeResult.details.comboRisk.toFixed(1)}</span>
+                </div>
+              )}
+              {judgeResult.negativePenalty !== 0 && (
+                <div className="flex justify-between border-b border-gray-700 pb-1">
+                  <span className="text-gray-400">负面修正</span><span className="text-green-400">{judgeResult.negativePenalty.toFixed(1)}</span>
                 </div>
               )}
               <div className="flex justify-between font-bold">
                 <span>总价值</span><span>{judgeResult.totalValue}</span>
               </div>
+              <div className="flex justify-between text-[10px] text-gray-500">
+                <span>警戒线 +{judgeResult.details.warningLimit.toFixed(1)}</span>
+                <span>破坏性上限 +{judgeResult.details.hardLimit.toFixed(1)}</span>
+              </div>
             </div>
+
+            {judgeResult.hardRuleViolations.length > 0 && (
+              <div className="space-y-1">
+                {judgeResult.hardRuleViolations.map((rule, i) => (
+                  <div key={i} className="flex items-start gap-1.5 rounded-lg border border-red-700 bg-red-950/50 p-2 text-xs text-red-300">
+                    <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />{rule}
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* 建议 - P2-04: 动态生成 */}
             <div className="space-y-1">

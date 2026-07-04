@@ -150,7 +150,7 @@ export default function FactionSelect({ onSelect, onSelectCustom, onBack }: Prop
             >将领：征服</h1>
             <Swords className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-500 scale-x-[-1]" />
           </div>
-          <p className="text-gray-400 text-[11px] sm:text-xs tracking-wider">v2.0 DEMO — 精确距离战术对决</p>
+          <p className="text-gray-400 text-[11px] sm:text-xs tracking-wider">V1.0 — 精确距离战术对决</p>
           <p className="text-gray-500 text-[10px]">选择阵营开始战斗</p>
         </div>
 

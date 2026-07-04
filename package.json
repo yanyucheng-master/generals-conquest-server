@@ -6,8 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "sync:netlify": "powershell -ExecutionPolicy Bypass -File scripts/sync-netlify-upload.ps1",
+    "pack:netlify": "npm run build && npm run sync:netlify",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "validate:diy": "node --experimental-strip-types scripts/validate_diy_balance.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

@@ -19,17 +19,23 @@
 GitHub 仓库：https://github.com/yanyucheng-master/generals-conquest-server
 
 ========================================
-一、Netlify — 上传哪些文件？
+一、Netlify — 前端网页（重点）
 ========================================
 
-【上传目录】netlify-upload/
+【详细文档】app/NETLIFY部署.md
 
-【操作】
-  1. npm run build
-  2. 将 dist/ 内容覆盖到 netlify-upload/
+【推荐：Git 自动部署】
+  1. Netlify 连接 GitHub 仓库 generals-conquest-server
+  2. 使用 netlify.toml（Build: npm run build，Publish: dist）
+  3. 环境变量 VITE_WS_URL=wss://yyc-generals-conquest-server-ws.onrender.com
+  4. 改代码后 push-github.ps1 → Netlify 自动构建
+
+【备选：拖拽上传】
+  1. cd app
+  2. npm run pack:netlify
   3. Netlify → Deploys → 拖拽 netlify-upload 文件夹
 
-【详细说明】见 netlify-upload/上传说明.txt
+【本地联机地址】复制 .env.example → .env.production 再构建
 
 ========================================
 二、Render — 联机服

@@ -581,7 +581,7 @@ export default function GachaAnimation({ results, drawMode, packType, onClose, o
   }, [stage, drawMode, hasSpotlight]);
 
   return (
-    <div data-gacha-animation="v2" className="fixed inset-0 z-[99999] overflow-y-auto bg-[#03050a] text-slate-100">
+    <div data-gacha-animation="v1" className="fixed inset-0 z-[99999] overflow-y-auto bg-[#03050a] text-slate-100">
       <style>{`
         @keyframes gachaPackOpen {
           0%, 32% { transform: translateY(0) rotate(0); filter: brightness(1); }

@@ -1,0 +1,22 @@
+# 《将领：征服》— Netlify 前端部署配置
+# 文档：NETLIFY部署.md
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+  # 联机地址请在 Netlify 控制台设置（Site configuration → Environment variables）：
+  # VITE_WS_URL = wss://yyc-generals-conquest-server-ws.onrender.com
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"

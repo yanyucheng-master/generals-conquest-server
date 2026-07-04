@@ -556,7 +556,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('╔══════════════════════════════════════════╗');
   console.log('║     《将领：征服》联机对战服务器         ║');
-  console.log('║           支持断线重连 v2.0              ║');
+  console.log('║           支持断线重连 V1.0              ║');
   console.log('╠══════════════════════════════════════════╣');
   console.log(`║  WebSocket: ws://0.0.0.0:${PORT}           ║`);
   console.log(`║  HTTP状态: http://0.0.0.0:${PORT}           ║`);

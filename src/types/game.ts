@@ -1,4 +1,4 @@
-// ======== 核心类型定义 v1.0 ========
+// ======== 核心类型定义 V1.0 ========
 
 export type Faction = 'empire' | 'wild' | 'arcane';
 export type CardType = '士兵' | '法术' | '装备';
@@ -9,7 +9,7 @@ export type GamePhase = 'faction_select' | 'playing' | 'game_over';
 export type TurnPhase = 'resource' | 'deploy' | 'attack' | 'end';
 export type PlayerType = 'player' | 'enemy';
 
-// ======== 技能系统 v1.0 ========
+// ======== 技能系统 V1.0 ========
 // 以下列表按用户提供的完整技能表整理
 export type Skill =
   // 已完整实现
@@ -19,7 +19,7 @@ export type Skill =
   | 'nimble'      // 灵动：位置变化时+X/+X
   | 'bleed'       // 流血：攻击附加X层流血DOT
   | 'tear'        // 撕裂：触发目标流血层数伤害
-  | 'poison'      // 中毒：攻击附加X层中毒，失效敌方光环
+  | 'poison'      // 中毒：攻击附加层数；中毒单位的强运、战术指挥、射击指挥失效
   | 'poisonBurst' // 毒爆：消耗中毒层数造成真实伤害
   | 'growth'      // 生长：受到治疗时+X/+X
   | 'balance'     // 均衡：手牌士兵费用变为X
@@ -48,7 +48,7 @@ export type Skill =
   | 'silence'     // 沉默：敌方主动/触发技能失效X回合
   | 'agile'       // 疾行：每回合可移动一次位置
   | 'fog'         // 迷雾：敌方看不到其他单位信息
-  | 'stealth'     // 隐踪：背面朝上，不能被法术选中
+  | 'stealth'     // 隐踪：未开放，暂不参与正式平衡
   | 'ambush'      // 伏击：受击前对攻击者造成X伤
   | 'precision'   // 精准：狙击无法被免疫且+X伤
   | 'disguise'    // 伪装：不能被狙击/随机选中
@@ -72,7 +72,7 @@ export type Skill =
   | 'destroy'      // 消灭：直接消灭一个单位（末日审判）
   | 'refreshBoost' // 刷新增幅：让场上所有单位再次触发法力增幅
   | 'cleanseSilence' // 净化沉默：移除所有友方单位的沉默效果
-  // 新增技能（v0.99 新卡包）
+  // 新增技能（V1.0 新卡包）
   | 'drawCard'     // 抽牌：抽取X张卡牌
   | 'healHQ'       // 治疗总部：恢复总部X点生命
   | 'discard';     // 弃牌：随机弃掉对手X张手牌

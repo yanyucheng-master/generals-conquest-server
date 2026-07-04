@@ -30,8 +30,8 @@ npm run dev
 | 平台 | 用途 | 设置 |
 |------|------|------|
 | **Render** | 联机服 | Root Directory: `server`，Build: `npm install`，Start: `npm start` |
-| **Netlify** | 前端网页 | Build: `npm run build`，Publish: `dist` |
-| 环境变量 | 前端连联机 | `VITE_WS_URL=wss://你的服务.onrender.com` |
+| **Netlify** | 前端网页 | 见 [NETLIFY部署.md](./NETLIFY部署.md)；或 `npm run pack:netlify` 后拖拽 `netlify-upload/` |
+| 环境变量 | 前端连联机 | Netlify 控制台或 `.env.production` 设置 `VITE_WS_URL=wss://你的服务.onrender.com` |
 
 当前线上地址（参考）：
 

@@ -15,7 +15,14 @@ DOCS = APP.parent / "documents"
 CARDS_TS = APP / "src" / "data" / "cards.ts"
 TODAY = date.today()
 DATE_CN = f"{TODAY.year}年{TODAY.month}月"
-VERSION = "v2.1"
+VERSION = "V1.0"
+NEUTRAL_CARD_LINE = "帝国军团 25张 | 荒野游侠 26张 | 奥术学院 25张 | 通用 4张"
+POISON_EFFECT_NOTE = "中毒单位的强运、战术指挥、射击指挥失效"
+STEALTH_NOTE = "未开放 / 未实现 / 暂不参与正式平衡"
+DIY_DESC = "允许玩家自由组合，但必须通过评分公式限制强度"
+DIY_EDITOR_NOTE = "现行编辑器仅创建品质固定为彩的士兵卡，可设置费用、子类型、属性、部署位置与最多3个技能"
+COMMERCIAL_DESC = "轻度养成与收集驱动，但避免明显 P2W"
+INTERNAL_EFFECT_CODES = {"magicDmg", "manaPierce"}
 
 CARD_PATTERN = re.compile(
     r"\{\s*id:\s*(\d+),\s*name:\s*'([^']+)',\s*cost:\s*(\d+),\s*quality:\s*'([^']+)',"
@@ -97,7 +104,7 @@ def card_stats(cards: list[dict]) -> dict:
     q = Counter(c["quality"] for c in cards)
     t = Counter(c["type"] for c in cards)
     st = Counter(c["subtype"] for c in cards)
-    faction_lines = " | ".join(f"{f} {len(by_faction[f])}张" for f in FACTION_ORDER if by_faction[f])
+    faction_lines = NEUTRAL_CARD_LINE
     return {
         "total": len(cards),
         "by_faction": dict(by_faction),
@@ -179,11 +186,14 @@ th{background:#f0f0f0;font-weight:bold}
         )
         body += """<table><thead><tr>
 <th>ID</th><th>名称</th><th>费用</th><th>品质</th><th>类型</th><th>子类型</th>
-<th>攻击</th><th>生命</th><th>护甲</th><th style="width:30%">描述</th><th style="width:20%">技能</th>
+<th>攻击</th><th>生命</th><th>护甲</th><th style="width:30%">描述</th><th style="width:20%">技能 / 内部效果码</th>
 </tr></thead><tbody>"""
         for c in fc:
             cls = QUALITY_CLASS.get(c["quality"], "")
-            tags = " ".join(f'<span class="skill-tag">{esc(s)}</span>' for s in c["skills"]) or "-"
+            tags = " ".join(
+                f'<span class="skill-tag">{esc(s)}{"（内部效果码）" if s in INTERNAL_EFFECT_CODES else ""}</span>'
+                for s in c["skills"]
+            ) or "-"
             body += (
                 f'<tr class="{cls}"><td>{c["id"]}</td><td>{esc(c["name"])}</td><td>{c["cost"]}</td>'
                 f'<td>{esc(c["quality"])}</td><td>{esc(c["type"])}</td><td>{esc(c["subtype"])}</td>'
@@ -222,7 +232,13 @@ th{background:#f0f0f0}
         f"部分实现: {ss['partial']}个 | 未实现: {ss['none']}个</p>"
         f"<p>{DATE_CN} | {VERSION}</p>"
     )
-    body = cover_block("", f"技能及其实际运行逻辑表 {VERSION}", meta)
+    body = cover_block("", f"技能及内部效果运行逻辑表 {VERSION}", meta)
+    body += (
+        '<div class="section-title">阅读说明</div>'
+        '<p><b>官方技能</b>会按触发时机参与技能展示；'
+        '<code>magicDmg</code> 是伤害类型的内部效果码，'
+        '<code>manaPierce</code> 是旧数据兼容别名，二者不应被当作独立官方技能或播放技能特效。</p>'
+    )
 
     def rows_for_status(status_label: str, css_class: str) -> str:
         rows = []
@@ -253,7 +269,7 @@ th{background:#f0f0f0}
             body += "<th style='width:15%'>技能</th><th style='width:40%'>运行逻辑</th><th style='width:12%'>类别</th><th style='width:18%'>代码位置</th><th style='width:10%'>状态</th>"
             body += f"</tr></thead><tbody>{section_rows}</tbody></table>"
 
-    body += f'<div class="section-title">四、数据说明</div><p>官方卡牌引用数合计 {sum(len(v) for v in usage.values())} 条；生成日期 {TODAY.isoformat()}。</p>'
+    body += f'<div class="section-title">四、数据说明</div><p>卡牌技能/内部效果码引用数合计 {sum(len(v) for v in usage.values())} 条；生成日期 {TODAY.isoformat()}。</p>'
     return f'<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>将领：征服 — 技能运行逻辑表</title><style>{css}</style></head><body>{body}</body></html>'
 
 
@@ -310,7 +326,7 @@ def gen_03(cards: list[dict], stats: dict, ss: dict) -> str:
 <p class="cover-subtitle">开发报告 {VERSION}</p>
 <div class="cover-meta">
 <p>精确距离策略卡牌对战游戏</p>
-<p>当前版本: {VERSION} DEMO | 总部血量: 40HP | 卡牌总数: {stats['total']}张</p>
+<p>当前版本: {VERSION} | 总部血量: 40HP | 卡牌总数: {stats['total']}张</p>
 <p>{DATE_CN}</p>
 </div></div></div>
 
@@ -318,11 +334,13 @@ def gen_03(cards: list[dict], stats: dict, ss: dict) -> str:
 <p>《将领：征服》是一款基于<strong>精确距离体系</strong>的1v1策略卡牌对战网页游戏。支持本地PvAI、公网联机PvP、抽卡与DIY卡组构建。</p>
 <div class="stats">
 <p><strong>部署：</strong>前端 Netlify | 联机服 Render WebSocket</p>
-<p><strong>最新进展（{VERSION}）：</strong>80张卡牌平衡调整、7项技能逻辑修复、UI大改、联机重连快照与随机效果同步</p>
+<p><strong>DIY 系统：</strong>{DIY_DESC}</p>
+<p><strong>商业化方向：</strong>{COMMERCIAL_DESC}</p>
+<p><strong>最新进展（现行构建，{TODAY.isoformat()}）：</strong>80张卡牌平衡调整、战场与卡组构筑UI优化、技能仅在实际触发时显示特效、流血/中毒/总部恢复严格显示数值、联机重连快照与随机效果同步</p>
 </div>
 
 <h1 id="sec2">二、版本演进（摘要）</h1>
-<h2>v2.1 — 平衡与联机（{DATE_CN}）</h2>
+<h2>{VERSION} — 平衡与联机（{DATE_CN}）</h2>
 <ul>
 <li>卡牌池 {stats['total']} 张，新增「计划」ID=82，法术子类型统一为「法术卡」</li>
 <li>修复天火降临、混乱风暴、疾行、沉默、圣光、利息、法力贯穿等技能</li>
@@ -372,8 +390,18 @@ def update_static_html(stats: dict, ss: dict) -> None:
         ("卡牌总数: 79张", f"卡牌总数: {total}张"),
         ("全79张", f"全{total}张"),
         ("(79张)", f"({total}张)"),
+        ("v2.1", VERSION),
+        ("v2.0", VERSION),
+        ("v1.3", VERSION),
+        ("v1.2", VERSION),
+        ("v1.1", VERSION),
+        ("v3.0", VERSION),
+        ("v2.5", VERSION),
+        ("v4.0", VERSION),
+        ("v0.99", VERSION),
         ("v1.0", VERSION),
-        ("v2.0 DEMO", f"{VERSION} DEMO"),
+        ("V1.0 DEMO", VERSION),
+        ("v2.0 DEMO", VERSION),
         ("shadcn/ui</span>", "Lucide React</span>"),
         ("总计技能: 58个 | 已实现: 56个 | 部分实现: 2个", f"总计技能: {ss['total']}个 | 已实现: {ss['done']}个 | 部分实现: {ss['partial']}个 | 未实现: {ss['none']}个"),
         ("subtype: '魔法'", "subtype: '法术卡'"),  # manual examples if any
@@ -386,6 +414,7 @@ def update_static_html(stats: dict, ss: dict) -> None:
     p5 = DOCS / "05_future_roadmap.html"
     if p5.exists():
         t = p5.read_text(encoding="utf-8")
+        t = t.replace("（V1.0 - V1.0，", "（V1.0 后续规划，")
         t = t.replace(
             "<li><strong>断线重连</strong>：WebSocket断开后自动重连，恢复对局状态</li>",
             "<li><strong>断线重连</strong>：✅ 已实现（rejoin + state_sync 快照）</li>",
@@ -401,11 +430,316 @@ def update_static_html(stats: dict, ss: dict) -> None:
         p5.write_text(t, encoding="utf-8")
 
 
+def apply_content_standards() -> None:
+    """统一硬编码文案：通用卡数量、中毒、隐踪、DIY、商业化。"""
+    poison_block_old = """<li>中毒时强运(lucky)失效</li>
+<li>中毒时战术指挥/射击指挥加成失效</li>"""
+    poison_block_new = f"<li>{POISON_EFFECT_NOTE}</li>"
+
+    stealth_row_old = "<tr><td>隐踪(stealth)</td><td>士兵部署到战场</td><td>获得隐身状态</td></tr>"
+    stealth_row_new = f"<tr><td>隐踪(stealth)</td><td>—</td><td>{STEALTH_NOTE}</td></tr>"
+
+    tactic_row_old = "<tr><td>战术/射击指挥</td><td>全局计算</td><td>近战/弓箭友军+1攻（中毒时失效）</td></tr>"
+    tactic_row_new = f"<tr><td>战术/射击指挥</td><td>全局计算</td><td>近战/弓箭友军+攻（{POISON_EFFECT_NOTE}）</td></tr>"
+
+    diy_old = "允许玩家创建自定义卡牌并构建卡组："
+    diy_new = f"{DIY_DESC}。玩家可创建自定义卡牌并构建卡组："
+
+    diy_formula_old = "<li><strong>评判公式</strong>：属性价值 + 技能价值 - 费用惩罚，得分<1偏弱，1~3适中，>3偏强</li>"
+    diy_formula_new = "<li><strong>评分公式</strong>：属性价值 + 技能价值 - 费用惩罚，得分&lt;1偏弱，1~3适中，&gt;3偏强（超限不可保存）</li>"
+
+    biz_model_old = "<p><strong>商业模式：</strong>赛季通行证 +  cosmetic商城（皮肤/特效/战场） + 广告收入</p>"
+    biz_model_new = f"<p><strong>商业模式：</strong>{COMMERCIAL_DESC}</p>"
+
+    diy_biz_old = "<p>玩家可以创建自定义卡牌，系统通过评判公式自动评估卡牌强度，确保对战平衡。</p>"
+    diy_biz_new = f"<p>{DIY_DESC}。系统通过评分公式自动评估卡牌强度，确保对战平衡。</p>"
+
+    roadmap_commercial_old = """<h2>商业化方向</h2>
+<ul>
+<li><strong>赛季通行证</strong>：每月新赛季，新卡牌/皮肤/奖励</li>
+<li><strong> cosmetic商店</strong>：卡牌皮肤、战场背景、特效（不影响平衡）</li>
+<li><strong>赞助内容</strong>：与桌游/卡牌品牌联动</li>
+</ul>"""
+    roadmap_commercial_new = f"""<h2>商业化方向</h2>
+<p>{COMMERCIAL_DESC}</p>
+<ul>
+<li><strong>赛季通行证</strong>：外观与收集向奖励，不影响对战数值</li>
+<li><strong> cosmetic商店</strong>：卡牌皮肤、战场背景、特效（不影响平衡）</li>
+<li><strong>赞助内容</strong>：与桌游/卡牌品牌联动</li>
+</ul>"""
+
+    p04 = DOCS / "04_comprehensive_manual.html"
+    if p04.exists():
+        t = p04.read_text(encoding="utf-8")
+        t = t.replace(poison_block_old, poison_block_new)
+        t = t.replace(stealth_row_old, stealth_row_new)
+        t = t.replace(tactic_row_old, tactic_row_new)
+        t = t.replace(diy_old, diy_new)
+        t = t.replace(diy_formula_old, diy_formula_new)
+        t = t.replace("评判公式", "评分公式")
+        p04.write_text(t, encoding="utf-8")
+        print("standards", p04.name)
+
+    p06 = DOCS / "06_business_plan.html"
+    if p06.exists():
+        t = p06.read_text(encoding="utf-8")
+        t = t.replace(biz_model_old, biz_model_new)
+        t = t.replace(diy_biz_old, diy_biz_new)
+        t = t.replace("<td>3张</td></tr>\n</tbody>", "<td>4张</td></tr>\n</tbody>")
+        t = t.replace("通用</td><td>全阵营可用</td><td>强力但费用高的法术</td><td>3张</td>", "通用</td><td>全阵营可用</td><td>强力但费用高的法术</td><td>4张</td>")
+        t = t.replace("评判公式", "评分公式")
+        p06.write_text(t, encoding="utf-8")
+        print("standards", p06.name)
+
+    p05 = DOCS / "05_future_roadmap.html"
+    if p05.exists():
+        t = p05.read_text(encoding="utf-8")
+        t = t.replace("<li><strong>新通用卡牌</strong>：5张通用法术卡</li>", "<li><strong>新通用卡牌</strong>：在现有4张通用卡体系上扩展</li>")
+        if roadmap_commercial_old in t:
+            t = t.replace(roadmap_commercial_old, roadmap_commercial_new)
+        p05.write_text(t, encoding="utf-8")
+        print("standards", p05.name)
+
+    arch = DOCS / "核心代码架构.md"
+    if arch.exists():
+        t = arch.read_text(encoding="utf-8")
+        t = t.replace("stealth: boolean;          // 是否隐身", f"isStealthed: boolean;     // 隐踪：{STEALTH_NOTE}")
+        t = t.replace("| 'stealth'        // 隐身：部署后隐身", f"| 'stealth'        // 隐踪：{STEALTH_NOTE}")
+        t = t.replace("// 中毒时战术指挥/射击指挥失效（buff加成仍有效）", f"// {POISON_EFFECT_NOTE}（buff加成仍有效）")
+        if DIY_DESC not in t:
+            t = t.replace("| `src/data/diySystem.ts` | DIY卡牌系统 |", f"| `src/data/diySystem.ts` | DIY卡牌系统（{DIY_DESC}） |")
+        arch.write_text(t, encoding="utf-8")
+        print("standards", arch.name)
+
+
+def parse_diy_skill_values() -> list[tuple[str, float, str]]:
+    text = (APP / "src/data/diySystem.ts").read_text(encoding="utf-8")
+    rows: list[tuple[str, float, str]] = []
+    for name, val, desc in re.findall(
+        r"'([^']+)':\s*\{\s*value:\s*([-\d.]+),\s*desc:\s*'([^']*)'",
+        text,
+    ):
+        if name in ("value", "desc"):
+            continue
+        rows.append((name, float(val), desc))
+    return rows
+
+
+def parse_diy_skill_groups() -> list[tuple[str, list[str]]]:
+    text = (APP / "src/data/diySystem.ts").read_text(encoding="utf-8")
+    groups: list[tuple[str, list[str]]] = []
+    for block in re.finditer(
+        r"label:\s*'([^']+)',\s*skills:\s*\[(.*?)\]",
+        text,
+        re.DOTALL,
+    ):
+        label = block.group(1)
+        skills = re.findall(r"'([^']+)'", block.group(2))
+        if label and skills:
+            groups.append((label, skills))
+    return groups
+
+
+def parse_diy_conflicts() -> list[tuple[str, str, str]]:
+    text = (APP / "src/data/diySystem.ts").read_text(encoding="utf-8")
+    rows: list[tuple[str, str, str]] = []
+    for m in re.finditer(
+        r"\{\s*skills:\s*\[(.*?)\],\s*(?:requires:\s*'([^']*)',\s*)?reason:\s*'([^']*)',\s*type:\s*'([^']*)'",
+        text,
+        re.DOTALL,
+    ):
+        skills = ", ".join(re.findall(r"'([^']+)'", m.group(1)))
+        req = m.group(2) or "—"
+        reason = m.group(3)
+        typ = m.group(4)
+        rows.append((skills, typ, reason if req == "—" else f"{reason}（需 {req}）"))
+    return rows
+
+
+def gen_07_diy_judge_formula() -> str:
+    css = """body{margin:0;padding:0;font-family:"Noto Serif SC",Georgia,serif;font-size:10.5pt;line-height:1.65;color:#333}
+@page{size:A4;margin:2.5cm 2cm}
+.cover{width:210mm;height:297mm;page-break-after:always;background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);position:relative}
+.cover-content{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;width:80%}
+.cover-title{font-size:30pt;font-weight:700;color:#f5f5f5;margin-bottom:.5cm;letter-spacing:3pt}
+.cover-subtitle{font-size:15pt;color:#e0e0e0;margin-bottom:2cm}
+.cover-meta{font-size:11pt;color:#ccc;line-height:2}
+h1{font-size:18pt;margin-top:1.5em;margin-bottom:.5em;border-bottom:2px solid #333;padding-bottom:.2em;page-break-after:avoid}
+h2{font-size:14pt;margin-top:1.2em;margin-bottom:.4em;border-left:4px solid #333;padding-left:.5em;page-break-after:avoid}
+h3{font-size:11pt;margin-top:1em;margin-bottom:.3em;font-weight:bold}
+.theorem{border-left:3px solid #333;padding:.5em 1em;margin:1em 0;background:#fafafa}
+table{width:100%;border-collapse:collapse;font-size:8.5pt;margin:.5em 0}
+th,td{border:1px solid #999;padding:4px 6px;text-align:left;vertical-align:top}
+th{background:#f0f0f0;font-weight:bold}
+tr{page-break-inside:avoid}
+code{font-family:"Courier New",monospace;font-size:8.5pt;background:#f5f5f5;padding:.1em .3em}
+.note{background:#fff8e1;border-left:3px solid #ffb300;padding:.6em 1em;margin:.6em 0;font-size:9.5pt}
+.warn{background:#ffebee;border-left:3px solid #c62828;padding:.6em 1em;margin:.6em 0;font-size:9.5pt}"""
+
+    skill_map = {n: (v, d) for n, v, d in parse_diy_skill_values()}
+    groups = parse_diy_skill_groups()
+    conflicts = parse_diy_conflicts()
+
+    body = f"""
+<div class="cover"><div class="cover-content">
+<h1 class="cover-title">将领：征服</h1>
+<p class="cover-subtitle">现行 DIY 评判公式 {VERSION}</p>
+<div class="cover-meta">
+<p>数据来源：<code>src/data/diySystem.ts</code></p>
+<p>{DIY_DESC}</p>
+<p>{DATE_CN}</p>
+</div></div></div>
+
+<h1 id="sec1">一、设计原则</h1>
+<p>{DIY_DESC}。{DIY_EDITOR_NOTE}；系统实时计算<strong>评分偏差</strong>并给出可否保存结论。</p>
+<div class="warn"><strong>实现边界：</strong><code>diySystem.ts</code> 仍保留法术卡公式和「魔法伤害」条目供内部兼容，但现行卡牌创建界面不会创建法术卡；「魔法伤害」也不属于官方可展示技能。</div>
+<ul>
+<li>士兵卡：以 <code>攻击 + 生命 + 护甲</code> 作为身材价值，并计入子类型税、协同与组合风险。</li>
+<li>法术卡：底层评分器保留此计算能力，但现行编辑器尚未开放法术卡创建。</li>
+<li>技能冲突、重叠和依赖缺失只产生警告，不再降低评分；强组合通过组合风险和硬规则约束。</li>
+<li>「隐踪、追击、灵动」属于未开放技能：创建界面隐藏，旧数据使用时阻止保存；「疾行」正常开放。</li>
+</ul>
+
+<h1 id="sec2">二、核心公式</h1>
+<div class="theorem">
+<p><strong>费用基准 baseValue</strong></p>
+<p>士兵：<code>baseValue = cost × 2.2 + 1</code></p>
+<p>法术：<code>baseValue = cost × 1.5 + 0.5</code></p>
+<p><strong>总价值 totalValue</strong></p>
+<p><code>totalValue = bodyValue + skillValue + subtypeTax + positionBonus + synergyBonus + comboRisk + negativePenalty</code></p>
+<p>其中 <code>bodyValue = atk + hp + armor</code>（法术为 0），<code>skillValue = Σ 正面技能价值</code>；悬赏等负面价值单独计入 <code>negativePenalty</code>。</p>
+<p><strong>偏差 deviation</strong> = <code>totalValue − baseValue</code></p>
+</div>
+
+<h1 id="sec3">三、修正项说明</h1>
+<h2>3.1 子类型税 subtypeTax</h2>
+<table>
+<thead><tr><th>子类型</th><th>近战</th><th>弓箭</th><th>狙击</th><th>魔法</th><th>随机</th></tr></thead>
+<tbody><tr><td>价值</td><td>0</td><td>+0.3</td><td>+0.7</td><td>+1.0</td><td>+1.2</td></tr></tbody>
+</table>
+
+<h2>3.2 部署位置修正 positionBonus</h2>
+<p>仅士兵生效；法术无位置修正。</p>
+<table>
+<thead><tr><th>子类型</th><th>front（前线）</th><th>back（底线）</th><th>both（均可）</th></tr></thead>
+<tbody>
+<tr><td>近战</td><td>+0.5</td><td>−0.3</td><td>+0.3</td></tr>
+<tr><td>弓箭</td><td>+0.3</td><td>+0.5</td><td>+0.4</td></tr>
+<tr><td>狙击</td><td>+0.2</td><td>+0.6</td><td>+0.4</td></tr>
+<tr><td>魔法</td><td>+0.3</td><td>+0.4</td><td>+0.3</td></tr>
+<tr><td>随机</td><td>+0.3</td><td>+0.3</td><td>+0.3</td></tr>
+</tbody></table>
+
+<h2>3.3 协同、组合风险与负面修正</h2>
+<ul>
+<li><strong>negativePenalty</strong>：含「悬赏」技能时 −0.5</li>
+<li><strong>synergyBonus</strong>：正面且已开放技能数 &gt; 1 时，<code>(技能数 − 1) × 0.6</code></li>
+<li><strong>comboRisk</strong>：将闪击+DOT、毒爆/撕裂链、飞翔+俯冲、嘲讽防御链、随机+强运、法力增幅链等高收益组合额外计分。</li>
+<li><strong>conflictPenalty</strong>：为兼容旧存档保留字段，但现行值恒为 0。</li>
+</ul>
+<table>
+<thead><tr><th>高危组合</th><th>风险值</th></tr></thead>
+<tbody>
+<tr><td>闪击 + 流血/中毒</td><td>+1.5</td></tr>
+<tr><td>闪击 + 毒爆/撕裂</td><td>+2.0</td></tr>
+<tr><td>中毒 + 毒爆</td><td>+1.5</td></tr>
+<tr><td>流血 + 撕裂</td><td>+1.2</td></tr>
+<tr><td>飞翔 + 俯冲</td><td>+0.8</td></tr>
+<tr><td>嘲讽 + 全抗/护甲/反击</td><td>+1.0</td></tr>
+<tr><td>随机 + 强运</td><td>+1.2</td></tr>
+<tr><td>随机 + 高层 DOT</td><td>+1.0</td></tr>
+<tr><td>魔法 + 法力增幅</td><td>+1.0</td></tr>
+<tr><td>法力增幅 + 刷新增幅</td><td>+2.0</td></tr>
+<tr><td>魔法免疫单位且生命 ≥ 6</td><td>+1.2</td></tr>
+<tr><td>6费及以上士兵 + 均衡3</td><td>+2.0</td></tr>
+</tbody></table>
+
+<h1 id="sec4">四、评级与保存规则</h1>
+<table>
+<thead><tr><th>偏差 deviation</th><th>评级 verdict</th><th>可否保存 canSave</th></tr></thead>
+<tbody>
+<tr><td>包含未开放技能</td><td>未开放技能</td><td>否</td></tr>
+<tr><td>触发身材上限</td><td>身材超出彩卡上限</td><td>否</td></tr>
+<tr><td>触发其他硬规则</td><td>破坏性组合</td><td>否</td></tr>
+<tr><td>&gt; hardLimit</td><td>破坏性超模</td><td>否</td></tr>
+<tr><td>&gt; warningLimit 且 ≤ hardLimit</td><td>彩色高危</td><td>是</td></tr>
+<tr><td>≥ lowerLimit 且 ≤ warningLimit</td><td>彩色平衡</td><td>是</td></tr>
+<tr><td>&lt; lowerLimit</td><td>明显亏模</td><td>是（警告）</td></tr>
+</tbody></table>
+<p>阈值：<code>warningLimit = cost ≤ 2 ? 6 : cost ≤ 5 ? 7 : 8</code>；<code>hardLimit = 9 + cost × 0.8</code>；<code>lowerLimit = −8</code>。</p>
+
+<h2>4.1 身材与低费硬规则</h2>
+<ul>
+<li>身材上限：1费 8、2费 10、3费 12、4费 14、5费 16、6费 18、7费及以上 22。</li>
+<li>1费且身材 ≥ 7：不能携带正面技能；2费且身材 ≥ 9：正面技能价值 ≤ 2；3费且身材 ≥ 11：正面技能价值 ≤ 4。</li>
+<li>1至2费满身材上限单位不能叠加正面技能。</li>
+<li>1至2费魔法/随机/狙击单位攻击不能高于 3。</li>
+<li>1至2费禁止：闪击、消灭、沉默2/5、均衡3、法力增幅5、刷新增幅、抽牌3、DOT爆发链、8点及以上总部直伤、限制部署。</li>
+<li>消灭与法力增幅5的最低费用均为 6。</li>
+</ul>
+
+<h1 id="sec5">五、卡组携带限制</h1>
+<table>
+<thead><tr><th>类型</th><th>单卡重复上限</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>铜卡</td><td>4 张</td><td>官方卡按品质计数</td></tr>
+<tr><td>银卡</td><td>3 张</td><td>—</td></tr>
+<tr><td>金卡</td><td>2 张</td><td>—</td></tr>
+<tr><td>彩卡</td><td>1 张</td><td>—</td></tr>
+<tr><td>DIY 卡</td><td>1 张</td><td>独立配额，品质固定为彩</td></tr>
+<tr><td>卡组总数</td><td>40 张</td><td>官方 + DIY 混合</td></tr>
+</tbody></table>
+
+<h1 id="sec6">六、技能冲突规则（{len(conflicts)} 条）</h1>
+<table>
+<thead><tr><th>涉及技能</th><th>类型</th><th>说明</th></tr></thead>
+<tbody>"""
+    type_label = {
+        "overlap": "功能重叠",
+        "contradiction": "逻辑矛盾",
+        "missing": "依赖缺失",
+        "mismatch": "类型不匹配",
+        "negative": "负面叠加",
+        "synergy": "协同",
+    }
+    for skills, typ, reason in conflicts:
+        body += f"<tr><td>{esc(skills)}</td><td>{esc(type_label.get(typ, typ))}</td><td>{esc(reason)}</td></tr>"
+    body += "</tbody></table>"
+
+    body += f"<h1 id=\"sec7\">七、技能价值表（{len(skill_map)} 项）</h1>"
+    body += f'<div class="warn"><strong>隐踪 (stealth)：</strong>{STEALTH_NOTE}。价值表保留条目供编辑器参考，但不计入正式平衡环境。</div>'
+
+    for label, skill_names in groups:
+        body += f"<h2>{esc(label)}</h2><table><thead><tr><th>技能</th><th>价值</th><th>说明</th><th>备注</th></tr></thead><tbody>"
+        for sk in skill_names:
+            if sk not in skill_map:
+                continue
+            val, desc = skill_map[sk]
+            note = STEALTH_NOTE if sk == "隐踪" else "—"
+            body += f"<tr><td>{esc(sk)}</td><td>{val:+.1f}</td><td>{esc(desc)}</td><td>{esc(note)}</td></tr>"
+        body += "</tbody></table>"
+
+    # 未分组的技能
+    grouped = {s for _, skills in groups for s in skills}
+    orphan = [(n, skill_map[n]) for n in sorted(skill_map) if n not in grouped]
+    if orphan:
+        body += "<h2>其他</h2><table><thead><tr><th>技能</th><th>价值</th><th>说明</th><th>备注</th></tr></thead><tbody>"
+        for name, (val, desc) in orphan:
+            note = STEALTH_NOTE if name == "隐踪" else "—"
+            body += f"<tr><td>{esc(name)}</td><td>{val:+.1f}</td><td>{esc(desc)}</td><td>{esc(note)}</td></tr>"
+        body += "</tbody></table>"
+
+    body += f"""
+<div class="note">本文档由 <code>scripts/generate_documents.py</code> 自动从 <code>diySystem.ts</code> 生成。修改公式或技能价值后请重新运行脚本同步。</div>
+"""
+    return f'<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>将领：征服 — 现行DIY评判公式</title><style>{css}</style></head><body>{body}</body></html>'
+
+
 def copy_xlsx() -> None:
     card_dir = APP / "card_data_export"
     skill_dir = APP / "skill_summary_export"
-    card_xlsx = sorted(card_dir.glob("*.xlsx"))
-    skill_xlsx = sorted(skill_dir.glob("*.xlsx")) if skill_dir.is_dir() else []
+    card_xlsx = sorted(card_dir.glob("*.xlsx"), key=lambda p: p.stat().st_mtime)
+    skill_xlsx = sorted(skill_dir.glob("*.xlsx"), key=lambda p: p.stat().st_mtime) if skill_dir.is_dir() else []
     if card_xlsx:
         dst = DOCS / "01_将领征服_现行卡牌数据表.xlsx"
         shutil.copy2(card_xlsx[-1], dst)
@@ -454,10 +788,11 @@ def gen_pdfs() -> None:
     mapping = [
         ("01_card_data_table.html", "01_将领征服_现行卡牌数据表.pdf"),
         ("02_skill_logic_table.html", "02_将领征服_技能运行逻辑表.pdf"),
-        ("03_development_report.html", "03_将领征服_开发报告v1.0.pdf"),
+        ("03_development_report.html", "03_将领征服_开发报告V1.0.pdf"),
         ("04_comprehensive_manual.html", "04_将领征服_详尽说明书.pdf"),
         ("05_future_roadmap.html", "05_将领征服_未来开发计划.pdf"),
         ("06_business_plan.html", "06_将领征服_商业计划书.pdf"),
+        ("07_diy_judge_formula.html", "07_将领征服_现行DIY评判公式.pdf"),
     ]
     for html_name, pdf_name in mapping:
         html = DOCS / html_name
@@ -511,7 +846,7 @@ def update_markdown(stats: dict, ss: dict) -> None:
             t = t.replace("### 6.5 攻击序列（防竞态）", insert + "### 6.5 攻击序列（防竞态）")
         t = t.replace(
             "const WS_URL = `ws://${window.location.hostname}:8080`;",
-            "const WS_URL = import.meta.env.VITE_WS_URL || `wss://yyc-generals-conquest-server-ws.onrender.com`;",
+            "const WS_URL = getEffectiveWsUrl();",
         )
         mp.write_text(t, encoding="utf-8")
         print("md", mp.name)
@@ -531,12 +866,14 @@ def main() -> None:
         "01_card_data_table.html": gen_01(cards, stats),
         "02_skill_logic_table.html": gen_02(gss.SKILL_REGISTRY, gss),
         "03_development_report.html": gen_03(cards, stats, ss),
+        "07_diy_judge_formula.html": gen_07_diy_judge_formula(),
     }
     for name, content in outputs.items():
         (DOCS / name).write_text(content, encoding="utf-8")
         print("html", name)
 
     update_static_html(stats, ss)
+    apply_content_standards()
     copy_xlsx()
     update_markdown(stats, ss)
     gen_pdfs()
